@@ -1,0 +1,15 @@
+[package]
+name = "event-bot"
+version = "0.1.0"
+authors = ["Riley Trautman <rileyt@spiceworks.com>"]
+
+[dependencies]
+chrono = "0.4"
+futures = "0.1"
+futures-state-stream = "0.2"
+time = "0.1"
+telebot = { git = "https://github.com/asonix/telebot", branch = "asonix/hyper" }
+
+[dependencies.tokio-postgres]
+version = "0.3"
+features = ["with-chrono"]
