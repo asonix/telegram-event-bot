@@ -5,10 +5,14 @@ authors = ["Riley Trautman <rileyt@spiceworks.com>"]
 
 [dependencies]
 chrono = "0.4"
+dotenv = "0.10"
+failure = "0.1"
+failure_derive = "0.1"
 futures = "0.1"
 futures-state-stream = "0.2"
 time = "0.1"
 telebot = { git = "https://github.com/asonix/telebot", branch = "asonix/hyper" }
+tokio-core = "0.1"
 
 [dependencies.tokio-postgres]
 version = "0.3"

@@ -1,311 +1,116 @@
 #![feature(conservative_impl_trait)]
+#![type_length_limit = "2097152"]
 
 extern crate chrono;
+extern crate dotenv;
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 extern crate futures;
 extern crate futures_state_stream;
 extern crate telebot;
 extern crate time;
+extern crate tokio_core;
 extern crate tokio_postgres;
+pub mod chat;
+pub mod chat_system;
+pub mod conn;
+pub mod error;
+pub mod event;
+pub mod host;
+mod util;
 
-use std::collections::HashMap;
+#[cfg(test)]
+mod tests {
+    use chrono::offset::Utc;
+    use futures::{Future, IntoFuture};
+    use tokio_core::reactor::Core;
+    use tokio_postgres::Connection;
 
-use chrono::DateTime;
-use chrono::offset::Utc;
-use futures::Future;
-use futures_state_stream::StateStream;
-use telebot::objects::Integer;
-use tokio_postgres::{Connection, Error};
-use tokio_postgres::rows::Row;
+    use chat_system::ChatSystem;
+    use conn::database_connection;
+    use event::{CreateEvent, Event};
+    use error::EventError;
 
-/// ChatSystem represents a series of linked chats
-///
-/// `events_channel` is the ID of the channel where full announcements are made
-/// `announce_chats` is as set of IDs where the bot should notify of announcements.
-///
-/// This is represented in the database as
-///
-/// ```
-/// Relations:
-/// chat_systems has_many chats (foreign_key on chats)
-///
-/// Columns:
-/// id, events_channel
-/// ```
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ChatSystem {
-    id: i32,
-    events_channel: Integer,
-    announce_chats: Vec<Integer>,
-}
+    #[test]
+    fn can_establish_db_connection() {
+        with_database(|connection| Ok(connection).into_future())
+    }
 
-/*
-#[sql("SELECT sys.id, sys.events_channel
-        FROM chat_systems AS sys
-        INNER JOIN chats AS ch ON ch.system_id = sys.id
-        WHERE ch.chat_id = $1")]
-pub struct LookupChatSystemByChatId {
-    chat_id: Integer,
-    chat_system: Option<ChatSystem>,
-}
-*/
+    #[test]
+    fn can_create_and_delete_chat_system() {
+        with_chat_system(2, |tup| Ok(tup).into_future())
+    }
 
-/// Chat represents a single telegram chat
-///
-/// `chat_id` is the Telegram ID of the chat
-///
-/// ```
-/// Relations:
-/// chats belongs_to chat_systems (foreign_key on chats)
-///
-/// Columns:
-/// id, system_id (foreign key), chat_id
-/// ```
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Chat {
-    id: i32,
-    system_id: i32,
-    chat_id: Integer,
-}
+    #[test]
+    fn can_create_and_delete_event() {
+        with_event(3, |tup| Ok(tup).into_future())
+    }
 
-/*
-#[sql("SELECT ch.id, ch.chat_id
-        FROM chats AS ch
-        WHERE ch.system_id = $1")]
-pub struct LookupChatBySystemId {
-    system_id: i32,
-    chat: Option<Chat>,
-}
+    fn with_database<F, G>(f: F)
+    where
+        F: FnOnce(Connection) -> G,
+        G: Future<Item = Connection, Error = EventError>,
+    {
+        let mut core = Core::new().unwrap();
 
-#[sql("SELECT ch.id, ch.system_id, ch.chat_id
-        FROM chats AS ch
-        INNER JOIN chat_systems AS sys ON ch.system_id = sys.id
-        WHERE sys.channel_id = $1")]
-pub struct LookupChatByChannelId {
-    channel_id: i32,
-    chat: Option<Chat>,
-}
-*/
+        let fut = database_connection(core.handle()).and_then(f);
 
-/// Event represents a scheduled Event
-///
-/// `date` is the date of the event
-/// `duration` represents how long the event is expected to last
-/// `hosts` represents the user_ids of the users who are hosting the event
-/// `title` is the name of the event
-/// `description` is the description of the event
-///
-/// ```
-/// Relations:
-/// events belongs_to chat_systems (foreign_key on events)
-/// events has_many hosts (foreign_key on hosts)
-///
-/// Columns:
-/// id, system_id, date, duration, title, description
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Event {
-    id: i32,
-    date: DateTime<Utc>,
-    end_date: DateTime<Utc>,
-    title: String,
-    description: String,
-    hosts: Vec<Integer>,
-}
+        core.run(fut).unwrap();
+    }
 
-impl Event {
-    fn condense_events_unordered(events: Vec<Self>) -> HashMap<i32, Self> {
-        events.into_iter().fold(HashMap::new(), |mut acc, event| {
-            let updated = {
-                if let Some(mut stored_event) = acc.get_mut(&event.id) {
-                    stored_event.hosts.extend(event.hosts.clone());
-                    true
-                } else {
-                    false
-                }
+    fn with_chat_system<F, G>(id: i64, f: F)
+    where
+        F: FnOnce((ChatSystem, Connection)) -> G,
+        G: Future<Item = (ChatSystem, Connection), Error = (EventError, Connection)>,
+    {
+        with_database(|connection| {
+            ChatSystem::create(id, connection)
+                .and_then(f)
+                .and_then(|(chat_system, connection)| chat_system.delete(connection))
+                .map(|(count, connection)| {
+                    assert_eq!(count, 1);
+                    connection
+                })
+                .map_err(|(e, _)| e)
+        })
+    }
+
+    fn with_event<F, G>(id: i64, f: F)
+    where
+        F: FnOnce((Event, Connection)) -> G,
+        G: Future<Item = (Event, Connection), Error = (EventError, Connection)>,
+    {
+        with_chat_system(id, |(chat_system, connection)| {
+            let new_event = CreateEvent {
+                start_date: Utc::now(),
+                end_date: Utc::now(),
+                title: "Hey!".to_owned(),
+                description: "Whoah hi".to_owned(),
+                hosts: Vec::new(),
             };
 
-            if !updated {
-                acc.insert(event.id, event);
-            }
-
-            acc
-        })
-    }
-
-    fn condense_events(events: Vec<Self>) -> Vec<Self> {
-        events.into_iter().fold(Vec::new(), |mut acc, event| {
-            let updated = {
-                let len = acc.len();
-
-                if let Some(mut prev_ev) = acc.get_mut(len - 1) {
-
-                    if prev_ev.id == event.id {
-                        prev_ev.hosts.extend(event.hosts.clone());
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            };
-
-            if !updated {
-                acc.push(event);
-            }
-
-            acc
-        })
-    }
-}
-
-pub fn lookup_event_full_by_chat_id_unordered(
-    connection: Connection,
-    chat_id: i32
-) -> impl Future<Item = (HashMap<i32, Event>, Connection), Error = (Error, Connection)>
-{
-    let sql = "SELECT ev.id, ev.date, ev.end_date, ev.title, ev.description, h.id, h.user_id
-               FROM events as ev
-               INNER JOIN chat_systems AS sys ON ev.system_id = sys.id
-               INNER JOIN chats AS ch ON ch.system_id = sys.id
-               LEFT JOIN hosts AS h ON h.event_id = ev.id
-               WHERE ch.id = $1";
-
-    connection
-        .prepare(sql)
-        .and_then(move |(s, c)| {
-            c.query(&s, &[&chat_id])
-                .map(|row| {
-                    // StateStream::map()
-                    let host = Host::maybe_from_row(&row, 5, 6);
-
-                    Event {
-                        id: row.get(0),
-                        date: row.get(1),
-                        end_date: row.get(2),
-                        title: row.get(3),
-                        description: row.get(4),
-                        hosts: host.into_iter().map(Host::into).collect(),
-                    }
+            new_event
+                .create(&chat_system, connection)
+                .map(|(event, connection)| {
+                    println!("Event: {:?}", event);
+                    (event, connection)
                 })
-                .collect()
-                .map(|(events, c)| {
-                    // Future::map()
-                    (Event::condense_events_unordered(events), c)
+                .and_then(f)
+                .and_then(|(event, connection)| event.delete(connection))
+                .map(|(count, connection)| {
+                    assert_eq!(count, 1);
+                    connection
+                })
+                .then(|res| match res {
+                    Ok(connection) => Ok((chat_system, connection)),
+                    Err((e, connection)) => Err((e, chat_system, connection)),
+                })
+                .or_else(|(e, chat_system, connection)| {
+                    chat_system
+                        .delete(connection)
+                        .and_then(move |(_, connection)| Err((e, connection)))
                 })
         })
-}
-
-pub fn lookup_event_full_by_chat_id(
-    connection: Connection,
-    chat_id: i32
-) -> impl Future<Item = (Vec<Event>, Connection), Error = (Error, Connection)>
-{
-    let sql = "SELECT ev.id, ev.date, ev.end_date, ev.title, ev.description, h.id, h.user_id
-               FROM events as ev
-               INNER JOIN chat_systems AS sys ON ev.system_id = sys.id
-               INNER JOIN chats AS ch ON ch.system_id = sys.id
-               LEFT JOIN hosts AS h ON h.event_id = ev.id
-               WHERE ch.id = $1
-               ORDER BY ev.date, ev.id";
-
-    connection
-        .prepare(sql)
-        .and_then(move |(s, c)| {
-            c.query(&s, &[&chat_id])
-                .map(|row| {
-                    // StateStream::map()
-                    let host = Host::maybe_from_row(&row, 5, 6);
-
-                    Event {
-                        id: row.get(0),
-                        date: row.get(1),
-                        end_date: row.get(2),
-                        title: row.get(3),
-                        description: row.get(4),
-                        hosts: host.into_iter().map(Host::into).collect(),
-                    }
-                })
-                .collect()
-                .map(|(events, c)| {
-                    // Future::map()
-                    (Event::condense_events(events), c)
-                })
-        })
-}
-
-/*
-#[sql("SELECT ev.id, ev.date, ev.end_date, ev.title, ev.description
-        FROM events AS ev,
-        INNER JOIN chat_systems AS sys ON ev.system_id = sys.id
-        INNER JOIN chats AS ch ON ch.system_id = sys.id
-        WHERE ch.id = $1")]
-pub struct LookupEventByChatId {
-    chat_id: Integer,
-    event: Option<Event>,
-}
-
-#[sql("SELECT h.id, h.user_id, ev.id, ev.date, ev.end_date, ev.title, ev.description
-        FROM events AS ev
-        INNER JOIN chat_systems AS sys ON ev.system_id = sys.id
-        INNER JOIN chats AS ch ON ch.system_id = sys.id
-        LEFT JOIN hosts AS h ON h.event_id = ev.id
-        WHERE ch.id = $1")]
-pub struct LookupEventWithHostsByChatId {
-    chat_id: i32,
-    event_full: Option<Event>
-}
-*/
-
-/// Host represents a host of a scheduled Event
-///
-/// `user_id` is the user_id of the host
-///
-/// ```
-/// Relations:
-/// hosts belongs_to events (foreign_key on hosts)
-///
-/// Columns:
-/// id, event_id, user_id
-/// ```
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Host {
-    id: i32,
-    user_id: Integer,
-}
-
-impl Host {
-    fn maybe_from_row(row: &Row, id_index: usize, user_id_index: usize) -> Option<Host> {
-        let id_opt: Option<i32> = row.get(id_index);
-        let user_id_opt: Option<Integer> = row.get(user_id_index);
-
-        id_opt.and_then(|id| {
-            user_id_opt.map(|user_id| Host { id, user_id })
-        })
-    }
-
-    /*
-    fn from_row(row: &Row, id_index: usize, user_id_index: usize) -> Host {
-        Host {
-            id: row.get(id_index),
-            user_id: row.get(user_id_index),
-        }
-    }
-    */
-}
-
-impl From<Host> for Integer {
-    fn from(host: Host) -> Self {
-        host.user_id
     }
 }
-
-/*
-#[sql("SELECT h.id, h.user_id
-        FROM hosts AS h,
-        INNER JOIN events AS ev
-        WHERE h.event_id = ev.id")]
-pub struct LookupHostByEventId {
-    event_id: i32,
-    host: Option<Host>,
-}
-*/
