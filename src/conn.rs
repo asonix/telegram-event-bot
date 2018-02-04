@@ -34,11 +34,13 @@ fn prepare_database_connection() -> Result<String, EventError> {
 }
 
 /// Given a handle to the event loop, create a connection to the database
-pub fn database_connection(handle: Handle) -> impl Future<Item = Connection, Error = EventError> {
-    prepare_database_connection()
-        .into_future()
-        .and_then(move |db_url| {
-            Connection::connect(db_url.as_ref(), TlsMode::None, &handle)
-                .map_err(|e| e.context(EventErrorKind::CreateConnection).into())
-        })
+pub fn database_connection(handle: Handle) -> Box<Future<Item = Connection, Error = EventError>> {
+    Box::new(
+        prepare_database_connection()
+            .into_future()
+            .and_then(move |db_url| {
+                Connection::connect(db_url.as_ref(), TlsMode::None, &handle)
+                    .map_err(|e| e.context(EventErrorKind::CreateConnection).into())
+            }),
+    )
 }

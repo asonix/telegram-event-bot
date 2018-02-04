@@ -47,31 +47,33 @@ impl CreateChat {
         self,
         chat_system: &ChatSystem,
         connection: Connection,
-    ) -> impl Future<Item = (Chat, Connection), Error = (EventError, Connection)> {
+    ) -> Box<Future<Item = (Chat, Connection), Error = (EventError, Connection)>> {
         let sql = "INSERT INTO chats (chat_id, system_id) VALUES ($1, $2) RETURNING id";
 
         let chat_id = self.chat_id;
         let system_id = chat_system.id();
 
-        connection
-            .prepare(sql)
-            .map_err(prepare_error)
-            .and_then(move |(s, connection)| {
-                connection
-                    .query(&s, &[&chat_id, &system_id])
-                    .map(move |row| Chat {
-                        id: row.get(0),
-                        chat_id: chat_id,
-                    })
-                    .collect()
-                    .map_err(insert_error)
-                    .and_then(|(mut chats, connection)| {
-                        if chats.len() > 0 {
-                            Ok((chats.remove(0), connection))
-                        } else {
-                            Err((EventErrorKind::Insert.into(), connection))
-                        }
-                    })
-            })
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[&chat_id, &system_id])
+                        .map(move |row| Chat {
+                            id: row.get(0),
+                            chat_id: chat_id,
+                        })
+                        .collect()
+                        .map_err(insert_error)
+                        .and_then(|(mut chats, connection)| {
+                            if chats.len() > 0 {
+                                Ok((chats.remove(0), connection))
+                            } else {
+                                Err((EventErrorKind::Insert.into(), connection))
+                            }
+                        })
+                }),
+        )
     }
 }
