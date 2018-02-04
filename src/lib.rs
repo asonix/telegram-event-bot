@@ -8,6 +8,8 @@ extern crate failure;
 extern crate failure_derive;
 extern crate futures;
 extern crate futures_state_stream;
+#[cfg(test)]
+extern crate rand;
 extern crate telebot;
 extern crate time;
 extern crate tokio_core;
@@ -23,6 +25,7 @@ mod util;
 
 #[cfg(test)]
 mod tests {
+    use rand::{thread_rng, Rng};
     use chrono::offset::Utc;
     use futures::{Future, IntoFuture};
     use tokio_core::reactor::Core;
@@ -48,7 +51,7 @@ mod tests {
     #[test]
     fn can_create_and_delete_event() {
         with_database(|connection| {
-            with_chat_system(connection, 3, |(chat_system, connection)| {
+            with_chat_system(connection, gen_id(), |(chat_system, connection)| {
                 with_event(chat_system, connection, Vec::new(), |tup| {
                     Ok(tup).into_future()
                 })
@@ -59,22 +62,29 @@ mod tests {
     #[test]
     fn can_create_and_delete_event_with_hosts() {
         with_database(|connection| {
-            with_chat_system(connection, 4, |(chat_system, connection)| {
+            with_chat_system(connection, gen_id(), |(chat_system, connection)| {
                 with_chat(
                     chat_system,
                     connection,
-                    5,
+                    gen_id(),
                     |(chat, chat_system, connection)| {
                         let system_clone = chat_system.clone();
 
-                        with_user(chat, connection, 6, move |(user, chat, connection)| {
-                            with_event(system_clone, connection, vec![user.clone()], |tup| {
-                                Ok(tup).into_future()
-                            }).then(move |res| match res {
-                                Ok((_, connection)) => Ok((user, chat, connection)),
-                                Err((error, _, connection)) => Err((error, user, chat, connection)),
-                            })
-                        }).then(move |res| match res {
+                        with_user(
+                            chat,
+                            connection,
+                            gen_id(),
+                            move |(user, chat, connection)| {
+                                with_event(system_clone, connection, vec![user.clone()], |tup| {
+                                    Ok(tup).into_future()
+                                }).then(move |res| match res {
+                                    Ok((_, connection)) => Ok((user, chat, connection)),
+                                    Err((error, _, connection)) => {
+                                        Err((error, user, chat, connection))
+                                    }
+                                })
+                            },
+                        ).then(move |res| match res {
                             Ok((chat, connection)) => Ok((chat, chat_system, connection)),
                             Err((error, chat, connection)) => {
                                 Err((error, chat, chat_system, connection))
@@ -89,8 +99,10 @@ mod tests {
     #[test]
     fn can_create_and_delete_chat() {
         with_database(|connection| {
-            with_chat_system(connection, 5, |(chat_system, connection)| {
-                with_chat(chat_system, connection, 6, |tup| Ok(tup).into_future())
+            with_chat_system(connection, gen_id(), |(chat_system, connection)| {
+                with_chat(chat_system, connection, gen_id(), |tup| {
+                    Ok(tup).into_future()
+                })
             })
         })
     }
@@ -98,11 +110,11 @@ mod tests {
     #[test]
     fn can_find_event_from_associated_chat() {
         with_database(|connection| {
-            with_chat_system(connection, 7, |(chat_system, connection)| {
+            with_chat_system(connection, gen_id(), |(chat_system, connection)| {
                 with_chat(
                     chat_system,
                     connection,
-                    8,
+                    gen_id(),
                     |(chat, chat_system, connection)| {
                         let chat_clone = chat.clone();
                         with_event(
@@ -132,11 +144,11 @@ mod tests {
     #[test]
     fn can_lookup_entire_system_by_chat_id() {
         with_database(|connection| {
-            with_chat_system(connection, 9, |(chat_system, connection)| {
+            with_chat_system(connection, gen_id(), |(chat_system, connection)| {
                 with_chat(
                     chat_system,
                     connection,
-                    10,
+                    gen_id(),
                     |(chat, chat_system, connection)| {
                         let chat_clone = chat.clone();
                         with_event(
@@ -168,13 +180,13 @@ mod tests {
     #[test]
     fn can_create_and_delete_user_given_chat() {
         with_database(|connection| {
-            with_chat_system(connection, 10, |(chat_system, connection)| {
+            with_chat_system(connection, gen_id(), |(chat_system, connection)| {
                 with_chat(
                     chat_system,
                     connection,
-                    12,
+                    gen_id(),
                     |(chat, chat_system, connection)| {
-                        with_user(chat, connection, 13, |tup| Ok(tup).into_future()).then(
+                        with_user(chat, connection, gen_id(), |tup| Ok(tup).into_future()).then(
                             move |res| match res {
                                 Ok((chat, connection)) => Ok((chat, chat_system, connection)),
                                 Err((error, chat, connection)) => {
@@ -191,13 +203,13 @@ mod tests {
     #[test]
     fn can_lookup_systems_by_user() {
         with_database(|connection| {
-            with_chat_system(connection, 10, |(chat_system, connection)| {
+            with_chat_system(connection, gen_id(), |(chat_system, connection)| {
                 with_chat(
                     chat_system,
                     connection,
-                    12,
+                    gen_id(),
                     |(chat, chat_system, connection)| {
-                        with_user(chat, connection, 13, |(user, chat, connection)| {
+                        with_user(chat, connection, gen_id(), |(user, chat, connection)| {
                             user.get_systems(connection).then(move |res| match res {
                                 Ok((systems, connection)) => {
                                     if systems.len() == 1 {
@@ -378,5 +390,11 @@ mod tests {
                         })
                 }),
         )
+    }
+
+    fn gen_id() -> i64 {
+        let mut rng = thread_rng();
+
+        rng.gen::<i64>()
     }
 }

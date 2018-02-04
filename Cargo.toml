@@ -17,3 +17,6 @@ tokio-core = "0.1"
 [dependencies.tokio-postgres]
 version = "0.3"
 features = ["with-chrono"]
+
+[dev-dependencies]
+rand = "0.4"
