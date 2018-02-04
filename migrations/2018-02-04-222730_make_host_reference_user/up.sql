@@ -1,0 +1,6 @@
+-- Your SQL goes here
+ALTER TABLE hosts
+DROP COLUMN user_id;
+
+ALTER TABLE hosts
+ADD COLUMN users_id INTEGER REFERENCES users ON DELETE CASCADE;

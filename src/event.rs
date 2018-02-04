@@ -13,7 +13,7 @@ use tokio_postgres::types::ToSql;
 
 use chat_system::ChatSystem;
 use error::{EventError, EventErrorKind};
-use host::Host;
+use user::User;
 use util::*;
 
 /// Event represents a scheduled Event
@@ -42,30 +42,38 @@ pub struct Event {
     end_date: DateTime<Utc>,
     title: String,
     description: String,
-    hosts: Vec<Host>,
+    hosts: Vec<User>,
 }
 
 impl Event {
-    pub fn from_parts(
-        id: i32,
-        start_date: DateTime<Utc>,
-        end_date: DateTime<Utc>,
-        title: String,
-        description: String,
-    ) -> Self {
+    pub fn maybe_from_parts(
+        id: Option<i32>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+        title: Option<String>,
+        description: Option<String>,
+    ) -> Option<Self> {
         let hosts = Vec::new();
 
-        Event {
-            id,
-            start_date,
-            end_date,
-            title,
-            description,
-            hosts,
-        }
+        id.and_then(|id| {
+            start_date.and_then(|start_date| {
+                end_date.and_then(|end_date| {
+                    title.and_then(|title| {
+                        description.map(|description| Event {
+                            id,
+                            start_date,
+                            end_date,
+                            title,
+                            description,
+                            hosts,
+                        })
+                    })
+                })
+            })
+        })
     }
 
-    pub fn add_host(&mut self, host: Option<Host>) {
+    pub fn add_host(&mut self, host: Option<User>) {
         self.hosts.extend(host);
     }
 
@@ -89,7 +97,7 @@ impl Event {
         &self.description
     }
 
-    pub fn hosts(&self) -> &[Host] {
+    pub fn hosts(&self) -> &[User] {
         self.hosts.as_slice()
     }
 
@@ -139,7 +147,7 @@ impl Event {
         })
     }
 
-    /// Delete an `Event` and all associated `Hosts`
+    /// Delete an `Event` and all associated `hosts`
     pub fn delete(
         self,
         connection: Connection,
@@ -166,11 +174,12 @@ impl Event {
     ) -> Box<Future<Item = (HashMap<i32, Self>, Connection), Error = (EventError, Connection)>>
     {
         let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, h.id, h.user_id
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
                FROM events as evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
                LEFT JOIN hosts AS h ON h.events_id = evt.id
+               LEFT JOIN users AS usr ON h.users_id = usr.id
                WHERE ch.id = $1";
 
         Box::new(
@@ -182,7 +191,7 @@ impl Event {
                         .query(&s, &[&chat_id])
                         .map(|row| {
                             // StateStream::map()
-                            let host = Host::maybe_from_row(&row, 5, 6);
+                            let host = User::maybe_from_parts(row.get(5), row.get(6));
 
                             Event {
                                 id: row.get(0),
@@ -190,7 +199,7 @@ impl Event {
                                 end_date: row.get(2),
                                 title: row.get(3),
                                 description: row.get(4),
-                                hosts: host.into_iter().map(Host::into).collect(),
+                                hosts: host.into_iter().map(User::into).collect(),
                             }
                         })
                         .collect()
@@ -212,11 +221,12 @@ impl Event {
         connection: Connection,
     ) -> Box<Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)>> {
         let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, h.id, h.user_id
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
                FROM events as evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
                LEFT JOIN hosts AS h ON h.events_id = evt.id
+               LEFT JOIN users AS usr ON h.users_id = usr.id
                WHERE ch.chat_id = $1
                ORDER BY evt.start_date, evt.id";
 
@@ -229,7 +239,7 @@ impl Event {
                         .query(&s, &[&chat_id])
                         .map(|row| {
                             // StateStream::map()
-                            let host = Host::maybe_from_row(&row, 5, 6);
+                            let host = User::maybe_from_parts(row.get(5), row.get(6));
 
                             Event {
                                 id: row.get(0),
@@ -237,7 +247,7 @@ impl Event {
                                 end_date: row.get(2),
                                 title: row.get(3),
                                 description: row.get(4),
-                                hosts: host.into_iter().map(Host::into).collect(),
+                                hosts: host.into_iter().map(User::into).collect(),
                             }
                         })
                         .collect()
@@ -257,7 +267,7 @@ pub struct CreateEvent {
     pub end_date: DateTime<Utc>,
     pub title: String,
     pub description: String,
-    pub hosts: Vec<Integer>,
+    pub hosts: Vec<User>,
 }
 
 impl CreateEvent {
@@ -320,7 +330,7 @@ fn insert_event(
     end_date: DateTime<Utc>,
     title: String,
     description: String,
-    hosts: Vec<Integer>,
+    hosts: Vec<User>,
     transaction: Transaction,
 ) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Transaction)>> {
     Box::new(
@@ -353,12 +363,12 @@ fn insert_event(
 }
 
 fn prepare_hosts(
-    hosts: &[Integer],
+    hosts: &[User],
     event: Event,
     transaction: Transaction,
 ) -> Result<(String, Event, Transaction), (EventError, Event, Transaction)> {
     if hosts.len() > 0 {
-        let sql = "INSERT INTO hosts (user_id, events_id) VALUES".to_owned();
+        let sql = "INSERT INTO hosts (users_id, events_id) VALUES".to_owned();
 
         let values = hosts
             .iter()
@@ -371,7 +381,7 @@ fn prepare_hosts(
             .join(", ");
 
         Ok((
-            format!("{} {} RETURNING id, user_id", sql, values),
+            format!("{} {} RETURNING users_id", sql, values),
             event,
             transaction,
         ))
@@ -381,7 +391,7 @@ fn prepare_hosts(
 }
 
 fn insert_hosts(
-    hosts: Vec<Integer>,
+    hosts: Vec<User>,
     event: Event,
     transaction: Transaction,
 ) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Transaction)>> {
@@ -404,7 +414,7 @@ fn insert_hosts(
 }
 
 fn insert_hosts_prepare(
-    hosts: Vec<Integer>,
+    hosts: Vec<User>,
     hosts_sql: String,
     event: Event,
     transaction: Transaction,
@@ -422,19 +432,22 @@ fn insert_hosts_prepare(
                     .map_err(|e| (e.into(), event, transaction))
             })
             .and_then(move |(statement, event, transaction)| {
-                inser_hosts_query(hosts, statement, event, transaction)
+                insert_hosts_query(hosts, statement, event, transaction)
             }),
     )
 }
 
-fn inser_hosts_query(
-    hosts: Vec<Integer>,
+fn insert_hosts_query(
+    hosts: Vec<User>,
     statement: Statement,
     mut event: Event,
     transaction: Transaction,
 ) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Event, Transaction)>> {
     let id = event.id();
-    let host_args = hosts.iter().fold(Vec::new(), |mut acc, user_id| {
+
+    let host_ids: Vec<_> = hosts.iter().map(|user| user.id()).collect();
+
+    let host_args = host_ids.iter().fold(Vec::new(), |mut acc, user_id| {
         acc.push(user_id as &ToSql);
         acc.push(&id as &ToSql);
         acc
@@ -445,19 +458,19 @@ fn inser_hosts_query(
     Box::new(
         transaction
             .query(&statement, host_args.as_slice())
-            .map(move |row| Host::from_row(&row, 0, 1))
+            .map(move |row| row.get(0))
             .collect()
             .map_err(transaction_insert_error)
-            .and_then(move |(returned_hosts, transaction)| {
-                if returned_hosts.len() == num_hosts {
-                    Ok((returned_hosts, transaction))
+            .and_then(move |(users_ids, transaction): (Vec<i32>, _)| {
+                if users_ids.len() == num_hosts {
+                    Ok((hosts, transaction))
                 } else {
                     Err((EventErrorKind::Insert.into(), transaction))
                 }
             })
             .then(|res| match res {
-                Ok((returned_hosts, transaction)) => {
-                    event.hosts.extend(returned_hosts);
+                Ok((hosts, transaction)) => {
+                    event.hosts.extend(hosts);
 
                     Ok((event, transaction))
                 }

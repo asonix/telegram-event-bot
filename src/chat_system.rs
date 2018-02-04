@@ -9,7 +9,7 @@ use tokio_postgres::rows::Row;
 use chat::Chat;
 use error::{EventError, EventErrorKind};
 use event::Event;
-use host::Host;
+use user::User;
 use util::*;
 
 /// ChatSystem represents a series of linked chats
@@ -70,7 +70,7 @@ impl ChatSystem {
         )
     }
 
-    /// Delete a `ChatSystem` and all associated `Chats`, `Events`, and `Hosts`
+    /// Delete a `ChatSystem` and all associated `Chats`, `Events`, and `Users`
     pub fn delete(
         self,
         connection: Connection,
@@ -87,25 +87,58 @@ impl ChatSystem {
         )
     }
 
+    /// Select all chat systems a user belongs to
+    pub fn by_user_id(
+        user_id: Integer,
+        connection: Connection,
+    ) -> Box<Future<Item = (Vec<ChatSystem>, Connection), Error = (EventError, Connection)>> {
+        let sql = "SELECT 
+                    DISTINCT sys.id, sys.events_channel
+                    FROM chat_systems AS sys
+                    INNER JOIN chats AS ch ON ch.system_id = sys.id
+                    INNER JOIN user_chats AS usch ON usch.chats_id = ch.id
+                    INNER JOIN users AS usr ON usch.users_id = usr.id
+                    WHERE usr.user_id = $1";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[&user_id])
+                        .map(|row| ChatSystem {
+                            id: row.get(0),
+                            events_channel: row.get(1),
+                        })
+                        .collect()
+                        .map_err(lookup_error)
+                }),
+        )
+    }
+
     /// Select an `Option<ChatSystem>`, `HashSet<Chat>`, and ordered `Vec<Event>` given a `chat_id`
-    pub fn by_chat_id(
+    pub fn full_by_chat_id(
         chat_id: Integer,
         connection: Connection,
-    ) -> impl Future<
-        Item = ((Option<Self>, HashSet<Chat>, Vec<Event>), Connection),
-        Error = (EventError, Connection),
+    ) -> Box<
+        Future<
+            Item = ((Option<Self>, HashSet<Chat>, Vec<Event>), Connection),
+            Error = (EventError, Connection),
+        >,
     > {
         let sql = "SELECT
                         sys.id, sys.events_channel,
                         ch.id, ch.chat_id,
                         ev.id, ev.start_date, ev.end_date, ev.title, ev.description,
-                        h.id, h.user_id
+                        usr.id, usr.user_id
                     FROM chats AS ch
                     INNER JOIN chat_systems AS sys ON ch.system_id = sys.id
                     LEFT JOIN events AS ev ON ev.system_id = sys.id
-                    LEFT JOIN hosts AS h ON h.event_id = ev.id
+                    LEFT JOIN hosts AS h ON h.events_id = ev.id
+                    LEFT JOIN users AS usr ON h.users_id = usr.id
                     WHERE ch.chat_id = $1
-                    ORDER BY ev.date, ev.id";
+                    ORDER BY ev.start_date, ev.id";
 
         Box::new(
             connection
@@ -114,7 +147,7 @@ impl ChatSystem {
                 .and_then(move |(s, connection)| {
                     connection
                         .query(&s, &[&chat_id])
-                        .map(|row: Row| -> (Self, Chat, Event) {
+                        .map(|row: Row| -> (Self, Chat, Option<Event>) {
                             let sys = ChatSystem {
                                 id: row.get(0),
                                 events_channel: row.get(1),
@@ -122,17 +155,18 @@ impl ChatSystem {
 
                             let ch = Chat::from_parts(row.get(2), row.get(3));
 
-                            let mut ev = Event::from_parts(
+                            let ev = Event::maybe_from_parts(
                                 row.get(4),
                                 row.get(5),
                                 row.get(6),
                                 row.get(7),
                                 row.get(8),
-                            );
+                            ).map(|mut ev| {
+                                let host = User::maybe_from_parts(row.get(9), row.get(10));
 
-                            let host = Host::maybe_from_row(&row, 9, 10);
-
-                            ev.add_host(host);
+                                ev.add_host(host);
+                                ev
+                            });
 
                             (sys, ch, ev)
                         })
@@ -145,7 +179,15 @@ impl ChatSystem {
 
                                     if len > 0 {
                                         let prev_event = event_vec.remove(len - 1);
-                                        Event::condense(&mut event_vec, prev_event, ev);
+                                        if let Some(ev) = ev {
+                                            Event::condense(&mut event_vec, prev_event, ev);
+                                        } else {
+                                            event_vec.push(prev_event);
+                                        }
+                                    } else {
+                                        if let Some(ev) = ev {
+                                            event_vec.push(ev);
+                                        }
                                     }
 
                                     chat_hash.insert(ch);

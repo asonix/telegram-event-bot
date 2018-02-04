@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use futures::Future;
 use futures_state_stream::StateStream;
 use telebot::objects::Integer;
@@ -43,6 +45,18 @@ impl Chat {
         connection: Connection,
     ) -> Box<Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)>> {
         Event::by_chat_id(self.chat_id, connection)
+    }
+
+    pub fn get_system_with_events(
+        &self,
+        connection: Connection,
+    ) -> Box<
+        Future<
+            Item = ((Option<ChatSystem>, HashSet<Chat>, Vec<Event>), Connection),
+            Error = (EventError, Connection),
+        >,
+    > {
+        ChatSystem::full_by_chat_id(self.chat_id, connection)
     }
 
     pub fn delete(
