@@ -362,8 +362,8 @@ fn prepare_hosts(
 
         let values = hosts
             .iter()
-            .fold((Vec::new(), 0), |(mut acc, count), _| {
-                acc.push(format!("({}, {})", count, count + 1));
+            .fold((Vec::new(), 1), |(mut acc, count), _| {
+                acc.push(format!("(${}, ${})", count, count + 1));
 
                 (acc, count + 2)
             })
@@ -433,18 +433,23 @@ fn inser_hosts_query(
     mut event: Event,
     transaction: Transaction,
 ) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Event, Transaction)>> {
-    let hosts_refs: Vec<_> = hosts.iter().map(|user_id| user_id as &ToSql).collect();
+    let id = event.id();
+    let host_args = hosts.iter().fold(Vec::new(), |mut acc, user_id| {
+        acc.push(user_id as &ToSql);
+        acc.push(&id as &ToSql);
+        acc
+    });
 
-    let hosts_clone = hosts.clone();
+    let num_hosts = hosts.len();
 
     Box::new(
         transaction
-            .query(&statement, hosts_refs.as_slice())
+            .query(&statement, host_args.as_slice())
             .map(move |row| Host::from_row(&row, 0, 1))
             .collect()
             .map_err(transaction_insert_error)
             .and_then(move |(returned_hosts, transaction)| {
-                if returned_hosts.len() == hosts_clone.len() {
+                if returned_hosts.len() == num_hosts {
                     Ok((returned_hosts, transaction))
                 } else {
                     Err((EventErrorKind::Insert.into(), transaction))

@@ -44,7 +44,12 @@ mod tests {
 
     #[test]
     fn can_create_and_delete_event() {
-        with_event(3, |tup| Ok(tup).into_future())
+        with_event(3, Vec::new(), |tup| Ok(tup).into_future())
+    }
+
+    #[test]
+    fn can_create_and_delete_event_with_hosts() {
+        with_event(4, vec![1, 2, 3], |tup| Ok(tup).into_future())
     }
 
     fn with_database<F, G>(f: F)
@@ -76,7 +81,7 @@ mod tests {
         })
     }
 
-    fn with_event<F, G>(id: i64, f: F)
+    fn with_event<F, G>(id: i64, hosts: Vec<i64>, f: F)
     where
         F: FnOnce((Event, Connection)) -> G,
         G: Future<Item = (Event, Connection), Error = (EventError, Connection)>,
@@ -87,7 +92,7 @@ mod tests {
                 end_date: Utc::now(),
                 title: "Hey!".to_owned(),
                 description: "Whoah hi".to_owned(),
-                hosts: Vec::new(),
+                hosts: hosts,
             };
 
             println!("About to create new event");

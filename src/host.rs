@@ -11,7 +11,7 @@ use tokio_postgres::rows::Row;
 /// ### Columns:
 /// - id SERIAL
 /// - user_id BIGINT
-/// - event_id INTEGER REFERENCES events
+/// - events_id INTEGER REFERENCES events
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Host {
     id: i32,
