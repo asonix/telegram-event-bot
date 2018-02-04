@@ -90,6 +90,8 @@ mod tests {
                 hosts: Vec::new(),
             };
 
+            println!("About to create new event");
+
             new_event
                 .create(&chat_system, connection)
                 .map(|(event, connection)| {

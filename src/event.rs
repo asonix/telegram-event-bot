@@ -144,7 +144,7 @@ impl Event {
         self,
         connection: Connection,
     ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
-        let sql = "DELETE FROM events WHERE id = $1";
+        let sql = "DELETE FROM events AS ev WHERE ev.id = $1";
 
         Box::new(
             connection
@@ -267,7 +267,7 @@ impl CreateEvent {
         chat_system: &ChatSystem,
         connection: Connection,
     ) -> Box<Future<Item = (Event, Connection), Error = (EventError, Connection)>> {
-        let sql = "INSERT INTO events (start_date, end_date, title, description) VALUES ($1, $2, $3, $4) WHERE system_id = $5 RETURNING id";
+        let sql = "INSERT INTO events (start_date, end_date, title, description, system_id) VALUES ($1, $2, $3, $4, $5) RETURNING id";
 
         let CreateEvent {
             start_date,
