@@ -5,6 +5,7 @@ use tokio_postgres::Connection;
 
 use chat_system::ChatSystem;
 use error::{EventError, EventErrorKind};
+use event::Event;
 use util::*;
 
 /// Chat represents a single telegram chat
@@ -35,6 +36,29 @@ impl Chat {
 
     pub fn chat_id(&self) -> Integer {
         self.chat_id
+    }
+
+    pub fn get_events(
+        &self,
+        connection: Connection,
+    ) -> Box<Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)>> {
+        Event::by_chat_id(self.chat_id, connection)
+    }
+
+    pub fn delete(
+        self,
+        connection: Connection,
+    ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
+        let sql = "DELETE FROM chats AS ch WHERE ch.id = $1";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection.execute(&s, &[&self.id]).map_err(delete_error)
+                }),
+        )
     }
 }
 

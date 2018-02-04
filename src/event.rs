@@ -161,7 +161,7 @@ impl Event {
     /// This event list is unordered, which improves lookup time, but may be slower if the end result
     /// must be provided in order of date
     pub fn by_chat_id_unordered(
-        chat_id: i32,
+        chat_id: Integer,
         connection: Connection,
     ) -> Box<Future<Item = (HashMap<i32, Self>, Connection), Error = (EventError, Connection)>>
     {
@@ -170,7 +170,7 @@ impl Event {
                FROM events as evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
-               LEFT JOIN hosts AS h ON h.event_id = evt.id
+               LEFT JOIN hosts AS h ON h.events_id = evt.id
                WHERE ch.id = $1";
 
         Box::new(
@@ -208,7 +208,7 @@ impl Event {
     /// This creates a future whose item contains the database connection and an ordered vector of
     /// event structs. The events are ordered date.
     pub fn by_chat_id(
-        chat_id: i32,
+        chat_id: Integer,
         connection: Connection,
     ) -> Box<Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)>> {
         let sql =
@@ -216,8 +216,8 @@ impl Event {
                FROM events as evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
-               LEFT JOIN hosts AS h ON h.event_id = evt.id
-               WHERE ch.id = $1
+               LEFT JOIN hosts AS h ON h.events_id = evt.id
+               WHERE ch.chat_id = $1
                ORDER BY evt.start_date, evt.id";
 
         Box::new(
