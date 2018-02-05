@@ -65,3 +65,13 @@ impl ResponseType for NewEvent {
     type Item = Event;
     type Error = EventError;
 }
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct DeleteEvent {
+    pub event_id: i32,
+}
+
+impl ResponseType for DeleteEvent {
+    type Item = ();
+    type Error = EventError;
+}

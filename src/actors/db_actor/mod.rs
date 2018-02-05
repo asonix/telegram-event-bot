@@ -66,10 +66,31 @@ impl DbActor {
         )
     }
 
+    fn delete_event(
+        &mut self,
+        event_id: i32,
+    ) -> Box<Future<Item = ((), Connection), Error = Result<(EventError, Connection), EventError>>>
+    {
+        Box::new(
+            self.take_connection()
+                .into_future()
+                .map_err(Err)
+                .and_then(move |connection| Event::delete_by_id(event_id, connection).map_err(Ok))
+                .and_then(|(count, connection)| {
+                    if count == 1 {
+                        Ok(((), connection))
+                    } else {
+                        Err(Ok((EventErrorKind::Delete.into(), connection)))
+                    }
+                }),
+        )
+    }
+
     fn delete_chat_system(
         &mut self,
         channel_id: Integer,
-    ) -> Box<Future<Item = Connection, Error = Result<(EventError, Connection), EventError>>> {
+    ) -> Box<Future<Item = ((), Connection), Error = Result<(EventError, Connection), EventError>>>
+    {
         Box::new(
             self.take_connection()
                 .into_future()
@@ -83,7 +104,7 @@ impl DbActor {
                 .and_then(|(count, connection)| {
                     // TODO: move this to chat_system module
                     if count == 1 {
-                        Ok(connection)
+                        Ok(((), connection))
                     } else {
                         Err(Ok((EventErrorKind::Delete.into(), connection)))
                     }

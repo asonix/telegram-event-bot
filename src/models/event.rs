@@ -147,9 +147,9 @@ impl Event {
         })
     }
 
-    /// Delete an `Event` and all associated `hosts`
-    pub fn delete(
-        self,
+    /// Delete and `Event` and all associated `hosts` given an ID
+    pub fn delete_by_id(
+        id: i32,
         connection: Connection,
     ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
         let sql = "DELETE FROM events AS ev WHERE ev.id = $1";
@@ -159,9 +159,17 @@ impl Event {
                 .prepare(sql)
                 .map_err(prepare_error)
                 .and_then(move |(s, connection)| {
-                    connection.execute(&s, &[&self.id]).map_err(delete_error)
+                    connection.execute(&s, &[&id]).map_err(delete_error)
                 }),
         )
+    }
+
+    /// Delete an `Event` and all associated `hosts`
+    pub fn delete(
+        self,
+        connection: Connection,
+    ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
+        Event::delete_by_id(self.id, connection)
     }
 
     /// Given a chat id, lookup all associated events
