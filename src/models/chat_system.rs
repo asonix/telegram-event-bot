@@ -87,6 +87,39 @@ impl ChatSystem {
         )
     }
 
+    /// Select the chat system by channel id
+    pub fn by_channel_id(
+        channel_id: Integer,
+        connection: Connection,
+    ) -> Box<Future<Item = (ChatSystem, Connection), Error = (EventError, Connection)>> {
+        let sql = "SELECT sys.id
+                    FROM chat_systems AS sys
+                    WHERE sys.events_channel = $1";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[&channel_id])
+                        .map(move |row| ChatSystem {
+                            id: row.get(0),
+                            events_channel: channel_id,
+                        })
+                        .collect()
+                        .map_err(lookup_error)
+                })
+                .and_then(|(mut systems, connection)| {
+                    if systems.len() > 0 {
+                        Ok((systems.remove(0), connection))
+                    } else {
+                        Err((EventErrorKind::Lookup.into(), connection))
+                    }
+                }),
+        )
+    }
+
     /// Select all chat systems a user belongs to
     pub fn by_user_id(
         user_id: Integer,

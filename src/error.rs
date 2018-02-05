@@ -53,6 +53,7 @@ pub enum EventErrorKind {
     #[fail(display = "Failed to commit transaction")] Commit,
     #[fail(display = "Failed to create transaction")] Transaction,
     #[fail(display = "No hosts present")] Hosts,
+    #[fail(display = "No connection in DbActor")] MissingConnection,
 }
 
 /// Provide an error type for missing keys when constructing the database URL
