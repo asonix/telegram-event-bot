@@ -89,8 +89,8 @@ impl Chat {
         ChatSystem::full_by_chat_id(self.chat_id, connection)
     }
 
-    pub fn delete(
-        self,
+    pub fn delete_by_id(
+        id: i32,
         connection: Connection,
     ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
         let sql = "DELETE FROM chats AS ch WHERE ch.id = $1";
@@ -100,9 +100,16 @@ impl Chat {
                 .prepare(sql)
                 .map_err(prepare_error)
                 .and_then(move |(s, connection)| {
-                    connection.execute(&s, &[&self.id]).map_err(delete_error)
+                    connection.execute(&s, &[&id]).map_err(delete_error)
                 }),
         )
+    }
+
+    pub fn delete(
+        self,
+        connection: Connection,
+    ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
+        Chat::delete_by_id(self.id, connection)
     }
 }
 
