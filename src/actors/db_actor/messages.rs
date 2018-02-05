@@ -1,9 +1,12 @@
 use actix::ResponseType;
+use chrono::DateTime;
+use chrono::offset::Utc;
 use telebot::objects::Integer;
 
 use error::EventError;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;
+use models::event::Event;
 use models::user::User;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -35,5 +38,30 @@ pub struct NewUser {
 
 impl ResponseType for NewUser {
     type Item = User;
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct DeleteChannel {
+    pub channel_id: Integer,
+}
+
+impl ResponseType for DeleteChannel {
+    type Item = ();
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct NewEvent {
+    pub channel_id: Integer,
+    pub title: String,
+    pub description: String,
+    pub start_date: DateTime<Utc>,
+    pub end_date: DateTime<Utc>,
+    pub hosts: Vec<Integer>,
+}
+
+impl ResponseType for NewEvent {
+    type Item = Event;
     type Error = EventError;
 }
