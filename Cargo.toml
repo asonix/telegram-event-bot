@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Riley Trautman <rileyt@spiceworks.com>"]
 
 [dependencies]
+actix = "0.4"
 chrono = "0.4"
 dotenv = "0.10"
 failure = "0.1"

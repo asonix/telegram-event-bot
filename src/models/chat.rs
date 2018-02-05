@@ -5,10 +5,10 @@ use futures_state_stream::StateStream;
 use telebot::objects::Integer;
 use tokio_postgres::Connection;
 
-use chat_system::ChatSystem;
 use error::{EventError, EventErrorKind};
-use event::Event;
-use util::*;
+use super::chat_system::ChatSystem;
+use super::event::Event;
+use super::util::*;
 
 /// Chat represents a single telegram chat
 ///
@@ -38,6 +38,36 @@ impl Chat {
 
     pub fn chat_id(&self) -> Integer {
         self.chat_id
+    }
+
+    pub fn by_chat_id(
+        chat_id: Integer,
+        connection: Connection,
+    ) -> Box<Future<Item = (Chat, Connection), Error = (EventError, Connection)>> {
+        let sql = "SELECT id FROM chats AS ch WHERE ch.chat_id = $1";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[&chat_id])
+                        .map(move |row| Chat {
+                            id: row.get(0),
+                            chat_id: chat_id,
+                        })
+                        .collect()
+                        .map_err(lookup_error)
+                })
+                .and_then(|(mut chats, connection)| {
+                    if chats.len() > 0 {
+                        Ok((chats.remove(0), connection))
+                    } else {
+                        Err((EventErrorKind::Lookup.into(), connection))
+                    }
+                }),
+        )
     }
 
     pub fn get_events(

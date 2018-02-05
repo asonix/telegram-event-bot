@@ -3,10 +3,10 @@ use futures_state_stream::StateStream;
 use telebot::objects::Integer;
 use tokio_postgres::Connection;
 
-use chat::Chat;
-use chat_system::ChatSystem;
 use error::{EventError, EventErrorKind};
-use util::*;
+use super::chat::Chat;
+use super::chat_system::ChatSystem;
+use super::util::*;
 
 /// User represents a user that belongs to at least one chat in a system
 ///

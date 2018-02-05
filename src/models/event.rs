@@ -11,10 +11,10 @@ use tokio_postgres::stmt::Statement;
 use tokio_postgres::transaction::Transaction;
 use tokio_postgres::types::ToSql;
 
-use chat_system::ChatSystem;
 use error::{EventError, EventErrorKind};
-use user::User;
-use util::*;
+use super::chat_system::ChatSystem;
+use super::user::User;
+use super::util::*;
 
 /// Event represents a scheduled Event
 ///

@@ -5,6 +5,7 @@ use failure::{Context, Fail, ResultExt};
 use futures::{Future, IntoFuture};
 use tokio_core::reactor::Handle;
 use tokio_postgres::{Connection, TlsMode};
+
 use error::{DbConnError, EventError, EventErrorKind};
 
 // Wrap the var -> error -> context pipeline in a function

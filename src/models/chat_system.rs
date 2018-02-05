@@ -6,11 +6,11 @@ use telebot::objects::Integer;
 use tokio_postgres::Connection;
 use tokio_postgres::rows::Row;
 
-use chat::Chat;
 use error::{EventError, EventErrorKind};
-use event::Event;
-use user::User;
-use util::*;
+use super::chat::Chat;
+use super::event::Event;
+use super::user::User;
+use super::util::*;
 
 /// ChatSystem represents a series of linked chats
 ///
