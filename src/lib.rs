@@ -12,6 +12,7 @@ extern crate telebot;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_postgres;
+extern crate tokio_timer;
 
 mod actors;
 mod error;

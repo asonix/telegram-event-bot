@@ -61,6 +61,22 @@ impl Handler<DeleteEvent> for DbActor {
     }
 }
 
+impl Handler<GetEventsInRange> for DbActor {
+    type Result = ResponseFuture<Self, GetEventsInRange>;
+
+    fn handle(&mut self, msg: GetEventsInRange, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_events_in_range(msg.start_date, msg.end_date))
+    }
+}
+
+impl Handler<GetChatSystemByEventId> for DbActor {
+    type Result = ResponseFuture<Self, GetChatSystemByEventId>;
+
+    fn handle(&mut self, msg: GetChatSystemByEventId, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_chat_system_by_event_id(msg.event_id))
+    }
+}
+
 impl DbActor {
     fn wrap_fut<I, F>(fut: F) -> Box<ActorFuture<Item = I, Error = EventError, Actor = Self>>
     where

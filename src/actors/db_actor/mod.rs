@@ -168,4 +168,43 @@ impl DbActor {
                 }),
         )
     }
+
+    fn get_events_in_range(
+        &mut self,
+        start_date: DateTime<Utc>,
+        end_date: DateTime<Utc>,
+    ) -> Box<
+        Future<
+            Item = (Vec<Event>, Connection),
+            Error = Result<(EventError, Connection), EventError>,
+        >,
+    > {
+        Box::new(
+            self.take_connection()
+                .into_future()
+                .map_err(Err)
+                .and_then(move |connection| {
+                    Event::in_range(start_date, end_date, connection).map_err(Ok)
+                }),
+        )
+    }
+
+    fn get_chat_system_by_event_id(
+        &mut self,
+        event_id: i32,
+    ) -> Box<
+        Future<
+            Item = (ChatSystem, Connection),
+            Error = Result<(EventError, Connection), EventError>,
+        >,
+    > {
+        Box::new(
+            self.take_connection()
+                .into_future()
+                .map_err(Err)
+                .and_then(move |connection| {
+                    ChatSystem::by_event_id(event_id, connection).map_err(Ok)
+                }),
+        )
+    }
 }

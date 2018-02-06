@@ -172,6 +172,37 @@ impl Event {
         Event::delete_by_id(self.id, connection)
     }
 
+    /// Get a `Vec<Event>` with events happening within the next `start_date` to `end_date`
+    pub fn in_range(
+        start_date: DateTime<Utc>,
+        end_date: DateTime<Utc>,
+        connection: Connection,
+    ) -> Box<Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)>> {
+        let sql = "SELECT DISTINCT ev.id, ev.start_date, ev.end_date, ev.title, ev.description
+                    FROM events AS ev
+                    WHERE ev.start_date > $1 AND ev.start_date < $2";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[&start_date, &end_date])
+                        .map(|row| Event {
+                            id: row.get(0),
+                            start_date: row.get(1),
+                            end_date: row.get(2),
+                            title: row.get(3),
+                            description: row.get(4),
+                            hosts: Vec::new(),
+                        })
+                        .collect()
+                        .map_err(lookup_error)
+                }),
+        )
+    }
+
     /// Given a chat id, lookup all associated events
     ///
     /// This event list is unordered, which improves lookup time, but may be slower if the end result
@@ -183,7 +214,7 @@ impl Event {
     {
         let sql =
             "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
-               FROM events as evt
+               FROM events AS evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
                LEFT JOIN hosts AS h ON h.events_id = evt.id

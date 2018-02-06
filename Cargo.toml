@@ -14,6 +14,7 @@ futures-state-stream = "0.2"
 time = "0.1"
 telebot = { git = "https://github.com/asonix/telebot", branch = "asonix/hyper" }
 tokio-core = "0.1"
+tokio-timer = "0.1"
 
 [dependencies.tokio-postgres]
 version = "0.3"

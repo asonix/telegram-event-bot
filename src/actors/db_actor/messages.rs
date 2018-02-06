@@ -75,3 +75,24 @@ impl ResponseType for DeleteEvent {
     type Item = ();
     type Error = EventError;
 }
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct GetEventsInRange {
+    pub start_date: DateTime<Utc>,
+    pub end_date: DateTime<Utc>,
+}
+
+impl ResponseType for GetEventsInRange {
+    type Item = Vec<Event>;
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct GetChatSystemByEventId {
+    pub event_id: i32,
+}
+
+impl ResponseType for GetChatSystemByEventId {
+    type Item = ChatSystem;
+    type Error = EventError;
+}
