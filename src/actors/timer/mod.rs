@@ -12,7 +12,7 @@ use tokio_timer::{Sleep, Timer as TokioTimer};
 use actors::db_actor::DbActor;
 use actors::db_actor::messages::{DeleteEvent, GetEventsInRange};
 use actors::telegram_actor::TelegramActor;
-use actors::telegram_actor::messages::NotifyEvent;
+use actors::telegram_actor::messages::{EventOver, NotifyEvent};
 use error::{EventError, EventErrorKind};
 use models::event::Event;
 
@@ -52,12 +52,15 @@ impl Timer {
 
         for event in events {
             let event_id = event.id();
+            let system_id = event.system_id();
+
             if !self.delete_times.contains(&event_id) {
                 self.delete_times.insert(event_id);
 
                 let duration = event.end_date().signed_duration_since(now).num_seconds();
 
                 let db = self.db.clone();
+                let tg = self.tg.clone();
 
                 if duration > 0 {
                     Arbiter::handle().spawn(
@@ -66,11 +69,19 @@ impl Timer {
                             .map_err(|_| ())
                             .and_then(move |_| {
                                 db.send(DeleteEvent { event_id });
+                                tg.send(EventOver {
+                                    event_id,
+                                    system_id,
+                                });
                                 Ok(())
                             }),
                     )
                 } else {
                     db.send(DeleteEvent { event_id });
+                    tg.send(EventOver {
+                        event_id,
+                        system_id,
+                    });
                 }
             }
         }

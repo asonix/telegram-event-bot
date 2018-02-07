@@ -1,10 +1,11 @@
-use actix::{Actor, Context};
+use actix::Address;
 use chrono::DateTime;
 use chrono::offset::Utc;
 use futures::{Future, IntoFuture};
 use telebot::objects::Integer;
 use tokio_postgres::Connection;
 
+use actors::db_broker::DbBroker;
 use models::event::{CreateEvent, Event};
 use models::chat::{Chat, CreateChat};
 use models::chat_system::ChatSystem;
@@ -16,14 +17,18 @@ mod actor;
 pub mod messages;
 
 pub struct DbActor {
+    broker: Address<DbBroker>,
     connection: Option<Connection>,
 }
 
-impl Actor for DbActor {
-    type Context = Context<Self>;
-}
-
 impl DbActor {
+    pub fn new(broker: Address<DbBroker>, connection: Connection) -> Self {
+        DbActor {
+            broker: broker,
+            connection: Some(connection),
+        }
+    }
+
     fn take_connection(&mut self) -> Result<Connection, EventError> {
         self.connection
             .take()
@@ -189,6 +194,23 @@ impl DbActor {
         )
     }
 
+    fn get_events_for_system(
+        &mut self,
+        system_id: i32,
+    ) -> Box<
+        Future<
+            Item = (Vec<Event>, Connection),
+            Error = Result<(EventError, Connection), EventError>,
+        >,
+    > {
+        Box::new(
+            self.take_connection()
+                .into_future()
+                .map_err(Err)
+                .and_then(move |connection| Event::by_system_id(system_id, connection).map_err(Ok)),
+        )
+    }
+
     fn get_chat_system_by_event_id(
         &mut self,
         event_id: i32,
@@ -205,6 +227,23 @@ impl DbActor {
                 .and_then(move |connection| {
                     ChatSystem::by_event_id(event_id, connection).map_err(Ok)
                 }),
+        )
+    }
+
+    fn get_system_by_id(
+        &mut self,
+        system_id: i32,
+    ) -> Box<
+        Future<
+            Item = (ChatSystem, Connection),
+            Error = Result<(EventError, Connection), EventError>,
+        >,
+    > {
+        Box::new(
+            self.take_connection()
+                .into_future()
+                .map_err(Err)
+                .and_then(move |connection| ChatSystem::by_id(system_id, connection).map_err(Ok)),
         )
     }
 }

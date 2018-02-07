@@ -96,3 +96,23 @@ impl ResponseType for GetChatSystemByEventId {
     type Item = ChatSystem;
     type Error = EventError;
 }
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct LookupSystem {
+    pub system_id: i32,
+}
+
+impl ResponseType for LookupSystem {
+    type Item = ChatSystem;
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct GetEventsForSystem {
+    pub system_id: i32,
+}
+
+impl ResponseType for GetEventsForSystem {
+    type Item = Vec<Event>;
+    type Error = EventError;
+}

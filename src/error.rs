@@ -56,6 +56,7 @@ pub enum EventErrorKind {
     #[fail(display = "No connection in DbActor")] MissingConnection,
     #[fail(display = "Failed passing message")] Cancelled,
     #[fail(display = "Failed to send telegram message")] Telegram,
+    #[fail(display = "Failed to get a connection to the database")] NoAvailableConnection,
 }
 
 /// Provide an error type for missing keys when constructing the database URL

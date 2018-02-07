@@ -43,6 +43,7 @@ pub struct Event {
     title: String,
     description: String,
     hosts: Vec<User>,
+    system_id: i32,
 }
 
 impl Event {
@@ -52,6 +53,7 @@ impl Event {
         end_date: Option<DateTime<Utc>>,
         title: Option<String>,
         description: Option<String>,
+        system_id: Option<i32>,
     ) -> Option<Self> {
         let hosts = Vec::new();
 
@@ -59,13 +61,16 @@ impl Event {
             start_date.and_then(|start_date| {
                 end_date.and_then(|end_date| {
                     title.and_then(|title| {
-                        description.map(|description| Event {
-                            id,
-                            start_date,
-                            end_date,
-                            title,
-                            description,
-                            hosts,
+                        description.and_then(|description| {
+                            system_id.map(|system_id| Event {
+                                id,
+                                start_date,
+                                end_date,
+                                title,
+                                description,
+                                hosts,
+                                system_id,
+                            })
                         })
                     })
                 })
@@ -99,6 +104,10 @@ impl Event {
 
     pub fn hosts(&self) -> &[User] {
         self.hosts.as_slice()
+    }
+
+    pub fn system_id(&self) -> i32 {
+        self.system_id
     }
 
     fn condense_events_unordered(events: Vec<Self>) -> HashMap<i32, Self> {
@@ -178,7 +187,7 @@ impl Event {
         end_date: DateTime<Utc>,
         connection: Connection,
     ) -> Box<Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)>> {
-        let sql = "SELECT DISTINCT ev.id, ev.start_date, ev.end_date, ev.title, ev.description
+        let sql = "SELECT DISTINCT ev.id, ev.start_date, ev.end_date, ev.title, ev.description, ev.system_id
                     FROM events AS ev
                     WHERE ev.start_date > $1 AND ev.start_date < $2";
 
@@ -196,9 +205,49 @@ impl Event {
                             title: row.get(3),
                             description: row.get(4),
                             hosts: Vec::new(),
+                            system_id: row.get(5),
                         })
                         .collect()
                         .map_err(lookup_error)
+                }),
+        )
+    }
+
+    /// Given the system id, lookup all associated events
+    ///
+    /// This creates a future whose item contains the database connection and an ordered vector of
+    /// event structs. The events are ordered date.
+    pub fn by_system_id(
+        system_id: i32,
+        connection: Connection,
+    ) -> Box<Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)>> {
+        let sql =
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
+                FROM events AS evt
+                LEFT JOIN hosts AS h on h.events_id = evt.id
+                WHERE evt.system_id = $1";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[&system_id])
+                        .map(move |row| Event {
+                            id: row.get(0),
+                            start_date: row.get(1),
+                            end_date: row.get(2),
+                            title: row.get(3),
+                            description: row.get(4),
+                            hosts: User::maybe_from_parts(row.get(5), row.get(6))
+                                .into_iter()
+                                .collect(),
+                            system_id: system_id,
+                        })
+                        .collect()
+                        .map_err(lookup_error)
+                        .map(|(events, connection)| (Event::condense_events(events), connection))
                 }),
         )
     }
@@ -213,7 +262,7 @@ impl Event {
     ) -> Box<Future<Item = (HashMap<i32, Self>, Connection), Error = (EventError, Connection)>>
     {
         let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id, sys.id
                FROM events AS evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
@@ -238,7 +287,8 @@ impl Event {
                                 end_date: row.get(2),
                                 title: row.get(3),
                                 description: row.get(4),
-                                hosts: host.into_iter().map(User::into).collect(),
+                                hosts: host.into_iter().collect(),
+                                system_id: row.get(7),
                             }
                         })
                         .collect()
@@ -260,7 +310,7 @@ impl Event {
         connection: Connection,
     ) -> Box<Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)>> {
         let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id, sys.id
                FROM events as evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
@@ -286,7 +336,8 @@ impl Event {
                                 end_date: row.get(2),
                                 title: row.get(3),
                                 description: row.get(4),
-                                hosts: host.into_iter().map(User::into).collect(),
+                                hosts: host.into_iter().collect(),
+                                system_id: row.get(7),
                             }
                         })
                         .collect()
@@ -386,6 +437,7 @@ fn insert_event(
                         title: title.clone(),
                         description: description.clone(),
                         hosts: Vec::new(),
+                        system_id: id,
                     })
                     .collect()
                     .map_err(transaction_insert_error)

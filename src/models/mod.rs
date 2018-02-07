@@ -1,6 +1,5 @@
 pub mod chat;
 pub mod chat_system;
-pub mod conn;
 pub mod event;
 pub mod user;
 mod util;

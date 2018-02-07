@@ -1,10 +1,15 @@
-use actix::{ActorFuture, Handler, ResponseFuture};
+use actix::{Actor, ActorFuture, AsyncContext, Context, Handler, ResponseFuture};
 use futures;
 use tokio_postgres::Connection;
 
+use actors::db_broker::messages::Ready;
 use error::EventError;
 use super::DbActor;
 use super::messages::*;
+
+impl Actor for DbActor {
+    type Context = Context<Self>;
+}
 
 impl Handler<NewChannel> for DbActor {
     type Result = ResponseFuture<Self, NewChannel>;
@@ -77,6 +82,22 @@ impl Handler<GetChatSystemByEventId> for DbActor {
     }
 }
 
+impl Handler<LookupSystem> for DbActor {
+    type Result = ResponseFuture<Self, LookupSystem>;
+
+    fn handle(&mut self, msg: LookupSystem, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_system_by_id(msg.system_id))
+    }
+}
+
+impl Handler<GetEventsForSystem> for DbActor {
+    type Result = ResponseFuture<Self, GetEventsForSystem>;
+
+    fn handle(&mut self, msg: GetEventsForSystem, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_events_for_system(msg.system_id))
+    }
+}
+
 impl DbActor {
     fn wrap_fut<I, F>(fut: F) -> Box<ActorFuture<Item = I, Error = EventError, Actor = Self>>
     where
@@ -90,14 +111,22 @@ impl DbActor {
 
         Box::new(
             wrap_future::<_, Self>(fut)
-                .map(|(item, connection), db_actor, _| {
+                .map(|(item, connection), db_actor, ctx| {
                     db_actor.connection = Some(connection);
+
+                    db_actor.broker.send(Ready {
+                        db_actor: ctx.address(),
+                    });
 
                     item
                 })
-                .map_err(|res, db_actor, _| match res {
+                .map_err(|res, db_actor, ctx| match res {
                     Ok((error, connection)) => {
                         db_actor.connection = Some(connection);
+
+                        db_actor.broker.send(Ready {
+                            db_actor: ctx.address(),
+                        });
 
                         error
                     }

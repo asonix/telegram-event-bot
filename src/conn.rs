@@ -16,7 +16,7 @@ fn get_db_env(key: &str, err: DbConnError) -> Result<String, Context<EventErrorK
 }
 
 // Build the database URL string from the provided environment variables
-fn prepare_database_connection() -> Result<String, EventError> {
+pub fn prepare_database_connection() -> Result<String, EventError> {
     dotenv().ok();
 
     let username = get_db_env("DB_USER", DbConnError::User)?;
@@ -34,14 +34,21 @@ fn prepare_database_connection() -> Result<String, EventError> {
     ))
 }
 
+pub fn connect_to_database(
+    db_url: String,
+    handle: Handle,
+) -> Box<Future<Item = Connection, Error = EventError>> {
+    Box::new(
+        Connection::connect(db_url.as_ref(), TlsMode::None, &handle)
+            .map_err(|e| e.context(EventErrorKind::CreateConnection).into()),
+    )
+}
+
 /// Given a handle to the event loop, create a connection to the database
 pub fn database_connection(handle: Handle) -> Box<Future<Item = Connection, Error = EventError>> {
     Box::new(
         prepare_database_connection()
             .into_future()
-            .and_then(move |db_url| {
-                Connection::connect(db_url.as_ref(), TlsMode::None, &handle)
-                    .map_err(|e| e.context(EventErrorKind::CreateConnection).into())
-            }),
+            .and_then(move |db_url| connect_to_database(db_url, handle)),
     )
 }

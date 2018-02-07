@@ -70,6 +70,39 @@ impl ChatSystem {
         )
     }
 
+    /// Fetch a chat system given it's ID
+    pub fn by_id(
+        id: i32,
+        connection: Connection,
+    ) -> Box<Future<Item = (ChatSystem, Connection), Error = (EventError, Connection)>> {
+        let sql = "SELECT sys.id, sys.events_channel
+                    FROM chat_systems AS sys
+                    WHERE sys.id = $1";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[&id])
+                        .map(|row| ChatSystem {
+                            id: row.get(0),
+                            events_channel: row.get(1),
+                        })
+                        .collect()
+                        .map_err(lookup_error)
+                        .and_then(|(mut chat_systems, connection)| {
+                            if chat_systems.len() == 1 {
+                                Ok((chat_systems.remove(0), connection))
+                            } else {
+                                Err((EventErrorKind::Lookup.into(), connection))
+                            }
+                        })
+                }),
+        )
+    }
+
     /// Delete a `ChatSystem` and all associated `Chats`, `Events`, and `Users` given an id
     pub fn delete_by_id(
         id: i32,
@@ -236,6 +269,7 @@ impl ChatSystem {
                                 row.get(6),
                                 row.get(7),
                                 row.get(8),
+                                Some(row.get(0)),
                             ).map(|mut ev| {
                                 let host = User::maybe_from_parts(row.get(9), row.get(10));
 
