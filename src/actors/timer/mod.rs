@@ -10,7 +10,7 @@ use telebot::objects::Integer;
 use tokio_timer::{Sleep, Timer as TokioTimer};
 
 use actors::db_actor::DbActor;
-use actors::db_actor::messages::GetEventsInRange;
+use actors::db_actor::messages::{DeleteEvent, GetEventsInRange};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::NotifyEvent;
 use error::{EventError, EventErrorKind};
@@ -47,11 +47,42 @@ impl Timer {
         )
     }
 
+    fn set_deleters(&mut self, events: &[Event]) {
+        let now = Utc::now();
+
+        for event in events {
+            let event_id = event.id();
+            if !self.delete_times.contains(&event_id) {
+                self.delete_times.insert(event_id);
+
+                let duration = event.end_date().signed_duration_since(now).num_seconds();
+
+                let db = self.db.clone();
+
+                if duration > 0 {
+                    Arbiter::handle().spawn(
+                        TokioTimer::default()
+                            .sleep(Duration::from_secs(duration as u64))
+                            .map_err(|_| ())
+                            .and_then(move |_| {
+                                db.send(DeleteEvent { event_id });
+                                Ok(())
+                            }),
+                    )
+                } else {
+                    db.send(DeleteEvent { event_id });
+                }
+            }
+        }
+    }
+
     fn set_notifiers(&mut self, events: Vec<Event>) {
         let now = Utc::now();
 
         for event in events {
             if !self.notification_times.contains(&event.id()) {
+                self.notification_times.insert(event.id());
+
                 let duration = event.start_date().signed_duration_since(now).num_seconds();
 
                 let tg = self.tg.clone();
