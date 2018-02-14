@@ -1,3 +1,5 @@
+#![feature(conservative_impl_trait)]
+
 extern crate actix;
 extern crate chrono;
 extern crate chrono_tz;
@@ -18,6 +20,5 @@ extern crate tokio_timer;
 pub mod actors;
 pub mod conn;
 pub mod error;
-pub mod telegram;
 
 mod models;

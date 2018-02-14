@@ -55,7 +55,7 @@ where
             Box::new(wrap_future(db_actor.call_fut(msg).then(
                 |msg_res| match msg_res {
                     Ok(res) => res,
-                    Err(err) => Err(err.context(EventErrorKind::Cancelled).into()),
+                    Err(err) => Err(err.context(EventErrorKind::Canceled).into()),
                 },
             )))
         } else {

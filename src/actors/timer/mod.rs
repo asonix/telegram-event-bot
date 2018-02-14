@@ -1,13 +1,12 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use actix::{Actor, Address, Arbiter, Context};
-use chrono::{DateTime, Duration as OldDuration};
+use actix::{Address, Arbiter};
+use chrono::Duration as OldDuration;
 use chrono::offset::Utc;
 use failure::Fail;
 use futures::Future;
-use telebot::objects::Integer;
-use tokio_timer::{Sleep, Timer as TokioTimer};
+use tokio_timer::Timer as TokioTimer;
 
 use actors::db_actor::DbActor;
 use actors::db_actor::messages::{DeleteEvent, GetEventsInRange};
@@ -16,18 +15,14 @@ use actors::telegram_actor::messages::{EventOver, NotifyEvent};
 use error::{EventError, EventErrorKind};
 use models::event::Event;
 
-// mod actor;
-// pub mod messages;
+mod actor;
+pub mod messages;
 
 pub struct Timer {
     db: Address<DbActor>,
     tg: Address<TelegramActor>,
     notification_times: HashSet<i32>,
     delete_times: HashSet<i32>,
-}
-
-impl Actor for Timer {
-    type Context = Context<Self>;
 }
 
 impl Timer {
@@ -42,7 +37,7 @@ impl Timer {
                 })
                 .then(|result| match result {
                     Ok(res) => res,
-                    Err(e) => Err(e.context(EventErrorKind::Cancelled).into()),
+                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
                 }),
         )
     }
