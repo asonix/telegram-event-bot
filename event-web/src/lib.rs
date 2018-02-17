@@ -43,7 +43,7 @@ pub fn verify_secret(id: &str, secret: &str) -> Result<bool, FrontendError> {
         .map_err(FrontendError::from)
 }
 
-fn new_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
+fn load_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
     let id = req.match_info()["secret"].to_owned();
 
     let option_event: Option<OptionEvent> = req.session()
@@ -111,9 +111,9 @@ fn new_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
         .context(FrontendErrorKind::Body)?)
 }
 
-fn load_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
+fn new_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
     req.session().remove("option_event");
-    new_form(req)
+    load_form(req)
 }
 
 fn submitted(mut req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = FrontendError>> {
@@ -147,7 +147,7 @@ fn submitted(mut req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Fr
                             .context(FrontendErrorKind::Body)
                             .map_err(FrontendError::from)
                     })
-                    .or_else(move |_| new_form(req))
+                    .or_else(move |_| load_form(req))
             }),
     )
 }
@@ -161,7 +161,7 @@ pub fn run() {
                     .finish(),
             ))
             .resource("/events/new/{secret}", |r| {
-                r.method(Method::GET).f(load_form);
+                r.method(Method::GET).f(new_form);
                 r.method(Method::POST).f(submitted);
             })
     }).bind("127.0.0.1:8000")
