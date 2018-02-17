@@ -92,6 +92,36 @@ fn new_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
         .map(|tz| tz.name())
         .collect::<Vec<_>>();
 
+    Ok(HTTPOk
+        .build()
+        .header(header::CONTENT_TYPE, "text/html")
+        .body(form(
+            create_event,
+            option_event,
+            submit_url,
+            years,
+            months,
+            days,
+            hours,
+            minutes,
+            timezones,
+            id,
+        ))
+        .context(FrontendErrorKind::Body)?)
+}
+
+fn form(
+    create_event: CreateEvent,
+    option_event: Option<OptionEvent>,
+    submit_url: String,
+    years: Vec<i32>,
+    months: Vec<(u32, &&str)>,
+    days: Vec<u32>,
+    hours: Vec<u32>,
+    minutes: Vec<u32>,
+    timezones: Vec<&'static str>,
+    id: String,
+) -> String {
     let markup = html! {
         (DOCTYPE)
         html {
@@ -120,7 +150,8 @@ fn new_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
                             input type="text" name="title" value=(create_event.title);
 
                             label for="description" "Description";
-                            textarea form="event" name="description" value=(create_event.description) {
+                            textarea form="event" name="description" {
+                                (create_event.description)
                             }
 
                             lable for="year" "Year";
@@ -230,11 +261,12 @@ fn new_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
         }
     };
 
-    Ok(HTTPOk
-        .build()
-        .header(header::CONTENT_TYPE, "text/html")
-        .body(markup.into_string())
-        .context(FrontendErrorKind::Body)?)
+    markup.into_string()
+}
+
+fn load_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
+    req.session().remove("option_event");
+    new_form(req)
 }
 
 fn submitted(mut req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = FrontendError>> {
@@ -315,7 +347,7 @@ pub fn run() {
                     .finish(),
             ))
             .resource("/events/new/{secret}", |r| {
-                r.method(Method::GET).f(new_form);
+                r.method(Method::GET).f(load_form);
                 r.method(Method::POST).f(submitted);
             })
     }).bind("127.0.0.1:8000")
