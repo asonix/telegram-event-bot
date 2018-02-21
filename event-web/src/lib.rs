@@ -13,6 +13,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+use actix::{Actor, Handler, ResponseType, SyncAddress};
 use actix_web::*;
 use actix_web::httpcodes::{HTTPCreated, HTTPOk};
 use actix_web::middleware::{CookieSessionBackend, RequestSession, SessionStorage};
@@ -31,6 +32,34 @@ pub use error::{FrontendError, FrontendErrorKind, MissingField};
 pub use event::{CreateEvent, Event, OptionEvent};
 use views::{form, success};
 
+#[derive(Clone)]
+pub struct EventHandler<T>
+where
+    T: Actor + Handler<NewEvent> + Clone,
+{
+    handler: SyncAddress<T>,
+}
+
+impl<T> EventHandler<T>
+where
+    T: Actor + Handler<NewEvent> + Clone,
+{
+    pub fn new(handler: SyncAddress<T>) -> Self {
+        EventHandler { handler }
+    }
+
+    pub fn notify(&self, event: Event) {
+        self.handler.send(NewEvent(event));
+    }
+}
+
+pub struct NewEvent(pub Event);
+
+impl ResponseType for NewEvent {
+    type Item = ();
+    type Error = ();
+}
+
 pub fn generate_secret(id: &str) -> Result<String, FrontendError> {
     bcrypt::hash(id, bcrypt::DEFAULT_COST)
         .context(FrontendErrorKind::Generation)
@@ -43,7 +72,10 @@ pub fn verify_secret(id: &str, secret: &str) -> Result<bool, FrontendError> {
         .map_err(FrontendError::from)
 }
 
-fn load_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
+fn load_form<T>(mut req: HttpRequest<EventHandler<T>>) -> Result<HttpResponse, FrontendError>
+where
+    T: Actor + Handler<NewEvent> + Clone,
+{
     let id = req.match_info()["secret"].to_owned();
 
     let option_event: Option<OptionEvent> = req.session()
@@ -96,27 +128,39 @@ fn load_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
     Ok(HTTPOk
         .build()
         .header(header::CONTENT_TYPE, "text/html")
-        .body(form(
-            create_event,
-            option_event,
-            submit_url,
-            years,
-            months,
-            days,
-            hours,
-            minutes,
-            timezones,
-            id,
-        ))
+        .body(
+            form(
+                create_event,
+                option_event,
+                submit_url,
+                years,
+                months,
+                days,
+                hours,
+                minutes,
+                timezones,
+                id,
+            ).into_string(),
+        )
         .context(FrontendErrorKind::Body)?)
 }
 
-fn new_form(mut req: HttpRequest) -> Result<HttpResponse, FrontendError> {
+fn new_form<T>(mut req: HttpRequest<EventHandler<T>>) -> Result<HttpResponse, FrontendError>
+where
+    T: Actor + Handler<NewEvent> + Clone,
+{
     req.session().remove("option_event");
     load_form(req)
 }
 
-fn submitted(mut req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = FrontendError>> {
+fn submitted<T>(
+    mut req: HttpRequest<EventHandler<T>>,
+) -> Box<Future<Item = HttpResponse, Error = FrontendError>>
+where
+    T: Actor + Handler<NewEvent> + Clone,
+{
+    let event_handler = req.state().clone();
+
     Box::new(
         req.urlencoded()
             .map_err(|e| e.context(FrontendErrorKind::MissingField).into())
@@ -137,13 +181,15 @@ fn submitted(mut req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Fr
                     .map(move |_| req)
                     .map_err(|_| FrontendErrorKind::Session.into())
             })
-            .and_then(|mut req| {
+            .and_then(move |mut req| {
                 Event::from_option(req.session().get("option_event").unwrap_or(None))
                     .and_then(|event| {
+                        event_handler.handler.send(NewEvent(event.clone()));
+
                         HTTPCreated
                             .build()
                             .header(header::CONTENT_TYPE, "text/html")
-                            .body(success(event))
+                            .body(success(event).into_string())
                             .context(FrontendErrorKind::Body)
                             .map_err(FrontendError::from)
                     })
@@ -152,21 +198,39 @@ fn submitted(mut req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Fr
     )
 }
 
-pub fn run() {
-    HttpServer::new(|| {
-        Application::new()
-            .middleware(SessionStorage::new(
-                CookieSessionBackend::build(&[0; 128])
-                    .secure(false)
-                    .finish(),
-            ))
-            .resource("/events/new/{secret}", |r| {
-                r.method(Method::GET).f(new_form);
-                r.method(Method::POST).f(submitted);
-            })
-    }).bind("127.0.0.1:8000")
+pub fn build<T>(
+    event_handler: EventHandler<T>,
+    prefix: Option<&str>,
+) -> Application<EventHandler<T>>
+where
+    T: Actor + Handler<NewEvent> + Clone,
+{
+    let app = Application::with_state(event_handler);
+
+    let app = if let Some(prefix) = prefix {
+        app.prefix(prefix)
+    } else {
+        app
+    };
+
+    app.middleware(SessionStorage::new(
+        CookieSessionBackend::build(&[0; 1024])
+            .secure(false)
+            .finish(),
+    )).resource("/events/new/{secret}", |r| {
+        r.method(Method::GET).f(new_form);
+        r.method(Method::POST).f(submitted);
+    })
+}
+
+pub fn start<T>(handler: SyncAddress<T>, addr: &str, prefix: Option<&'static str>)
+where
+    T: Actor + Handler<NewEvent> + Clone,
+{
+    HttpServer::new(move || build(EventHandler::new(handler.clone()), prefix))
+        .bind(addr)
         .unwrap()
-        .run()
+        .start();
 }
 
 #[cfg(test)]

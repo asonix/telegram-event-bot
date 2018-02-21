@@ -1,4 +1,4 @@
-use maud::{html, DOCTYPE};
+use maud::{html, Markup, DOCTYPE};
 
 use event::{CreateEvent, Event, OptionEvent};
 
@@ -13,8 +13,8 @@ pub fn form(
     minutes: Vec<u32>,
     timezones: Vec<&'static str>,
     id: String,
-) -> String {
-    let markup = html! {
+) -> Markup {
+    html! {
         (DOCTYPE)
         html {
             head {
@@ -151,13 +151,11 @@ pub fn form(
                 }
             }
         }
-    };
-
-    markup.into_string()
+    }
 }
 
-pub fn success(event: Event) -> String {
-    let markup = html! {
+pub fn success(event: Event) -> Markup {
+    html! {
         (DOCTYPE)
         html {
             head {
@@ -184,7 +182,5 @@ pub fn success(event: Event) -> String {
                 }
             }
         }
-    };
-
-    markup.into_string()
+    }
 }

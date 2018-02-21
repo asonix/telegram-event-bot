@@ -7,6 +7,7 @@ use failure::{Fail, ResultExt};
 
 use error::{FrontendError, FrontendErrorKind, MissingField};
 
+#[derive(Clone, Debug)]
 pub struct Event {
     title: String,
     description: String,
