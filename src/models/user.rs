@@ -86,6 +86,36 @@ impl User {
         ChatSystem::by_user_id(self.user_id, connection)
     }
 
+    pub fn get_with_chats(
+        connection: Connection,
+    ) -> Box<Future<Item = (Vec<(User, Chat)>, Connection), Error = (EventError, Connection)>> {
+        let sql = "SELECT usr.id, usr.user_id, ch.id, ch.chat_id
+                    FROM users AS usr
+                    INNER JOIN user_chats AS uc ON uc.users_id = usr.id
+                    INNER JOIN chats AS ch ON uc.chats_id = ch.id";
+
+        Box::new(
+            connection
+                .prepare(sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .query(&s, &[])
+                        .map(move |row| {
+                            (
+                                User {
+                                    id: row.get(0),
+                                    user_id: row.get(1),
+                                },
+                                Chat::from_parts(row.get(2), row.get(3)),
+                            )
+                        })
+                        .collect()
+                        .map_err(lookup_error)
+                }),
+        )
+    }
+
     pub fn delete_by_id(
         id: i32,
         connection: Connection,
@@ -115,6 +145,32 @@ pub struct CreateUser {
 }
 
 impl CreateUser {
+    pub fn create_relation(
+        users_id: Integer,
+        chats_id: Integer,
+        connection: Connection,
+    ) -> Box<Future<Item = ((), Connection), Error = (EventError, Connection)>> {
+        let join_sql = "INSERT INTO user_chats (users_id, chats_id) VALUES ($1, $2)";
+
+        Box::new(
+            connection
+                .prepare(join_sql)
+                .map_err(prepare_error)
+                .and_then(move |(s, connection)| {
+                    connection
+                        .execute(&s, &[&users_id, &chats_id])
+                        .map_err(insert_error)
+                        .and_then(|(count, connection)| {
+                            if count == 1 {
+                                Ok(((), connection))
+                            } else {
+                                Err((EventErrorKind::Insert.into(), connection))
+                            }
+                        })
+                }),
+        )
+    }
+
     pub fn create(
         self,
         chat: &Chat,

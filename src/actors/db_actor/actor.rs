@@ -39,7 +39,15 @@ impl Handler<NewUser> for DbActor {
     type Result = ResponseFuture<Self, NewUser>;
 
     fn handle(&mut self, msg: NewUser, _: &mut Self::Context) -> Self::Result {
-        DbActor::wrap_fut(self.insert_user(msg.chat_id, msg.user_id))
+        DbActor::wrap_fut(self.new_user(msg.chat_id, msg.user_id))
+    }
+}
+
+impl Handler<NewRelation> for DbActor {
+    type Result = ResponseFuture<Self, NewRelation>;
+
+    fn handle(&mut self, msg: NewRelation, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.new_user_chat_relation(msg.chat_id, msg.user_id))
     }
 }
 
@@ -95,6 +103,14 @@ impl Handler<GetEventsForSystem> for DbActor {
 
     fn handle(&mut self, msg: GetEventsForSystem, _: &mut Self::Context) -> Self::Result {
         DbActor::wrap_fut(self.get_events_for_system(msg.system_id))
+    }
+}
+
+impl Handler<GetUsersWithChats> for DbActor {
+    type Result = ResponseFuture<Self, GetUsersWithChats>;
+
+    fn handle(&mut self, _: GetUsersWithChats, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_users_with_chats())
     }
 }
 

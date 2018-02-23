@@ -46,10 +46,10 @@ pub fn form(
                                 (create_event.description)
                             }
 
-                            lable for="year" "Year";
-                            select name="year" {
+                            lable for="start_year" "Start Year";
+                            select name="start_year" {
                                 @for year in &years {
-                                    @if year == &create_event.year {
+                                    @if year == &create_event.start_year {
                                         option value=(year) selected="true" {
                                             (year)
                                         }
@@ -61,10 +61,10 @@ pub fn form(
                                 }
                             }
 
-                            label for="month" "Month";
-                            select name="month" {
+                            label for="start_month" "Start Month";
+                            select name="start_month" {
                                 @for &(i, month) in &months {
-                                    @if i == create_event.month {
+                                    @if i == create_event.start_month {
                                         option value=(i) selected="true" {
                                             (month)
                                         }
@@ -76,10 +76,10 @@ pub fn form(
                                 }
                             }
 
-                            label for="day" "Day";
-                            select name="day" {
+                            label for="start_day" "Start Day";
+                            select name="start_day" {
                                 @for day in &days {
-                                    @if day == &create_event.day {
+                                    @if day == &create_event.start_day {
                                         option value=(day) selected="true" {
                                             (day)
                                         }
@@ -91,10 +91,10 @@ pub fn form(
                                 }
                             }
 
-                            label for="hour" "Hour";
-                            select name="hour" {
+                            label for="start_hour" "Start Hour";
+                            select name="start_hour" {
                                 @for hour in &hours {
-                                    @if hour == &create_event.hour {
+                                    @if hour == &create_event.start_hour {
                                         option value=(hour) selected="true" {
                                             (hour)
                                         }
@@ -106,10 +106,93 @@ pub fn form(
                                 }
                             }
 
-                            label for="minute" "Minute";
-                            select name="minute" {
+                            label for="start_minute" "Start Minute";
+                            select name="start_minute" {
                                 @for minute in &minutes {
-                                    @if minute == &create_event.minute {
+                                    @if minute == &create_event.start_minute {
+                                        option value=(minute) selected="true" {
+                                            @if *minute < 10 {
+                                                (format!("0{}", minute))
+                                            } @else {
+                                                (minute)
+                                            }
+                                        }
+                                    } @else {
+                                        option value=(minute) {
+                                            @if *minute < 10 {
+                                                (format!("0{}", minute))
+                                            } @else {
+                                                (minute)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            lable for="end_year" "End Year";
+                            select name="end_year" {
+                                @for year in &years {
+                                    @if year == &create_event.end_year {
+                                        option value=(year) selected="true" {
+                                            (year)
+                                        }
+                                    } @else {
+                                        option value=(year) {
+                                            (year)
+                                        }
+                                    }
+                                }
+                            }
+
+                            label for="end_month" "End Month";
+                            select name="end_month" {
+                                @for &(i, month) in &months {
+                                    @if i == create_event.end_month {
+                                        option value=(i) selected="true" {
+                                            (month)
+                                        }
+                                    } @else {
+                                        option value=(i) {
+                                            (month)
+                                        }
+                                    }
+                                }
+                            }
+
+                            label for="end_day" "End Day";
+                            select name="end_day" {
+                                @for day in &days {
+                                    @if day == &create_event.end_day {
+                                        option value=(day) selected="true" {
+                                            (day)
+                                        }
+                                    } @else {
+                                        option value=(day) {
+                                            (day)
+                                        }
+                                    }
+                                }
+                            }
+
+                            label for="end_hour" "End Hour";
+                            select name="end_hour" {
+                                @for hour in &hours {
+                                    @if hour == &create_event.end_hour {
+                                        option value=(hour) selected="true" {
+                                            (hour)
+                                        }
+                                    } @else {
+                                        option value=(hour) {
+                                            (hour)
+                                        }
+                                    }
+                                }
+                            }
+
+                            label for="end_minute" "End Minute";
+                            select name="end_minute" {
+                                @for minute in &minutes {
+                                    @if minute == &create_event.end_minute {
                                         option value=(minute) selected="true" {
                                             @if *minute < 10 {
                                                 (format!("0{}", minute))
@@ -176,7 +259,10 @@ pub fn success(event: Event) -> Markup {
                             (event.description())
                         }
                         p {
-                            (event.datetime().to_rfc2822())
+                            "Start" (event.start_date().to_rfc2822())
+                        }
+                        p {
+                            "End" (event.end_date().to_rfc2822())
                         }
                     }
                 }

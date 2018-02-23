@@ -5,12 +5,11 @@ use failure::Fail;
 use futures::Future;
 use telebot::RcBot;
 use telebot::functions::FunctionMessage;
-use telebot::objects::Integer;
 // use telebot::objects::{InlineKeyboardButton, InlineKeyboardMarkup, Integer};
 
 use actors::db_broker::DbBroker;
 use actors::db_actor::messages::{GetChatSystemByEventId, GetEventsForSystem, LookupSystem};
-use error::{EventError, EventErrorKind};
+use error::EventErrorKind;
 use models::chat_system::ChatSystem;
 use models::event::Event;
 
@@ -102,143 +101,6 @@ impl TelegramActor {
             });
 
         self.bot.inner.handle.spawn(fut.map(|_| ()).map_err(|_| ()));
-    }
-
-    fn answer_title(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(chat_id, "Please describe your event".to_owned())
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn failed_answer_description(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(
-                chat_id,
-                "Sorry, I didn't catch that. Please describe your event again".to_owned(),
-            )
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn answer_description(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(chat_id, "When does your event start?".to_owned())
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn failed_answer_date(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(
-                chat_id,
-                "Sorry, I didn't catch that. When does your event start?".to_owned(),
-            )
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn answer_date(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(chat_id, "How long is your event?".to_owned())
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn failed_answer_end(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(
-                chat_id,
-                "Sorry, I didn't catch that. How long is your event?".to_owned(),
-            )
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn answer_end(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(chat_id, "Who is hosting your event?".to_owned())
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn failed_answer_hosts(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(
-                chat_id,
-                "Sorry, I didn't catch that. Who is hosting your event?".to_owned(),
-            )
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn answer_hosts(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(
-                chat_id,
-                "Great! Your event is ready to be created".to_owned(),
-            )
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn failed_answer_finalize(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(chat_id, "Failed to create the event.".to_owned())
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
-    }
-
-    fn answer_finalize(&self, chat_id: Integer) {
-        let fut = self.bot
-            .message(chat_id, "Created event!".to_owned())
-            .send()
-            .map_err(|e| e.context(EventErrorKind::Telegram).into());
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|_: EventError| ()));
     }
 }
 

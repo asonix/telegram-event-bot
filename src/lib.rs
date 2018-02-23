@@ -4,6 +4,7 @@ extern crate actix;
 extern crate chrono;
 extern crate chrono_tz;
 extern crate dotenv;
+extern crate event_web;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;

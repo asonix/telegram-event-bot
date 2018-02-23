@@ -3,6 +3,7 @@
 extern crate actix;
 extern crate dotenv;
 extern crate event_bot;
+extern crate event_web;
 extern crate futures;
 extern crate telebot;
 extern crate tokio_core;
@@ -12,6 +13,7 @@ use dotenv::dotenv;
 use event_bot::actors::db_broker::DbBroker;
 use event_bot::actors::telegram_actor::TelegramActor;
 use event_bot::actors::telegram_message_actor::TelegramMessageActor;
+use event_bot::actors::users_actor::UsersActor;
 use event_bot::conn::prepare_database_connection;
 use telebot::RcBot;
 
@@ -35,10 +37,13 @@ fn main() {
 
     let db_broker: Address<_> = DbBroker::new(db_url, 10).start();
 
+    let users_actor = UsersActor::new(db_broker.clone()).start();
+
     let tg: Address<_> = TelegramActor::new(actor_bot, db_broker.clone()).start();
 
     let msg_actor_bot = RcBot::new(Arbiter::handle().clone(), &bot_token);
-    let _: Address<_> = TelegramMessageActor::new(msg_actor_bot, db_broker, tg).start();
+    let _: Address<_> =
+        TelegramMessageActor::new(msg_actor_bot, db_broker, tg, users_actor).start();
 
     sys.run();
 }

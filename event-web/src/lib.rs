@@ -48,12 +48,12 @@ where
         EventHandler { handler }
     }
 
-    pub fn notify(&self, event: Event) {
-        self.handler.send(NewEvent(event));
+    pub fn notify(&self, event: Event, id: String) {
+        self.handler.send(NewEvent(event, id));
     }
 }
 
-pub struct NewEvent(pub Event);
+pub struct NewEvent(pub Event, pub String);
 
 impl ResponseType for NewEvent {
     type Item = ();
@@ -160,6 +160,7 @@ where
     T: Actor + Handler<NewEvent> + Clone,
 {
     let event_handler = req.state().clone();
+    let id = req.match_info()["secret"].to_owned();
 
     Box::new(
         req.urlencoded()
@@ -168,11 +169,16 @@ where
                 let option_event = OptionEvent::new(
                     params.remove("title"),
                     params.remove("description"),
-                    params.remove("year").and_then(|y| y.parse().ok()),
-                    params.remove("month").and_then(|m| m.parse().ok()),
-                    params.remove("day").and_then(|d| d.parse().ok()),
-                    params.remove("hour").and_then(|h| h.parse().ok()),
-                    params.remove("minute").and_then(|m| m.parse().ok()),
+                    params.remove("start_year").and_then(|y| y.parse().ok()),
+                    params.remove("start_month").and_then(|m| m.parse().ok()),
+                    params.remove("start_day").and_then(|d| d.parse().ok()),
+                    params.remove("start_hour").and_then(|h| h.parse().ok()),
+                    params.remove("start_minute").and_then(|m| m.parse().ok()),
+                    params.remove("end_year").and_then(|y| y.parse().ok()),
+                    params.remove("end_month").and_then(|m| m.parse().ok()),
+                    params.remove("end_day").and_then(|d| d.parse().ok()),
+                    params.remove("end_hour").and_then(|h| h.parse().ok()),
+                    params.remove("end_minute").and_then(|m| m.parse().ok()),
                     params.remove("timezone"),
                 );
 
@@ -184,7 +190,7 @@ where
             .and_then(move |mut req| {
                 Event::from_option(req.session().get("option_event").unwrap_or(None))
                     .and_then(|event| {
-                        event_handler.handler.send(NewEvent(event.clone()));
+                        event_handler.handler.send(NewEvent(event.clone(), id));
 
                         HTTPCreated
                             .build()

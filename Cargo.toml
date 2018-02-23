@@ -21,5 +21,9 @@ tokio-timer = "0.1"
 version = "0.3"
 features = ["with-chrono"]
 
+[dependencies.event-web]
+version = "0.1"
+path = "./event-web"
+
 [dev-dependencies]
 rand = "0.4"

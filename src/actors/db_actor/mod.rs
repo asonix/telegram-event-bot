@@ -155,7 +155,7 @@ impl DbActor {
         )
     }
 
-    fn insert_user(
+    fn new_user(
         &mut self,
         chat_id: Integer,
         user_id: Integer,
@@ -170,6 +170,22 @@ impl DbActor {
                     let new_user = CreateUser { user_id };
 
                     new_user.create(&chat, connection).map_err(Ok)
+                }),
+        )
+    }
+
+    fn new_user_chat_relation(
+        &mut self,
+        chat_id: Integer,
+        user_id: Integer,
+    ) -> Box<Future<Item = ((), Connection), Error = Result<(EventError, Connection), EventError>>>
+    {
+        Box::new(
+            self.take_connection()
+                .into_future()
+                .map_err(Err)
+                .and_then(move |connection| {
+                    CreateUser::create_relation(user_id, chat_id, connection).map_err(Ok)
                 }),
         )
     }
@@ -244,6 +260,22 @@ impl DbActor {
                 .into_future()
                 .map_err(Err)
                 .and_then(move |connection| ChatSystem::by_id(system_id, connection).map_err(Ok)),
+        )
+    }
+
+    fn get_users_with_chats(
+        &mut self,
+    ) -> Box<
+        Future<
+            Item = (Vec<(User, Chat)>, Connection),
+            Error = Result<(EventError, Connection), EventError>,
+        >,
+    > {
+        Box::new(
+            self.take_connection()
+                .into_future()
+                .map_err(Err)
+                .and_then(move |connection| User::get_with_chats(connection).map_err(Ok)),
         )
     }
 }

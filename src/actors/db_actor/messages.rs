@@ -42,6 +42,17 @@ impl ResponseType for NewUser {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct NewRelation {
+    pub chat_id: Integer,
+    pub user_id: Integer,
+}
+
+impl ResponseType for NewRelation {
+    type Item = ();
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct DeleteChannel {
     pub channel_id: Integer,
 }
@@ -114,5 +125,13 @@ pub struct GetEventsForSystem {
 
 impl ResponseType for GetEventsForSystem {
     type Item = Vec<Event>;
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GetUsersWithChats;
+
+impl ResponseType for GetUsersWithChats {
+    type Item = Vec<(User, Chat)>;
     type Error = EventError;
 }

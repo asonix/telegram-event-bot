@@ -11,7 +11,8 @@ use error::{FrontendError, FrontendErrorKind, MissingField};
 pub struct Event {
     title: String,
     description: String,
-    datetime: DateTime<Tz>,
+    start_date: DateTime<Tz>,
+    end_date: DateTime<Tz>,
 }
 
 impl Event {
@@ -28,8 +29,12 @@ impl Event {
         &self.description
     }
 
-    pub fn datetime(&self) -> DateTime<Tz> {
-        self.datetime
+    pub fn start_date(&self) -> DateTime<Tz> {
+        self.start_date
+    }
+
+    pub fn end_date(&self) -> DateTime<Tz> {
+        self.end_date
     }
 }
 
@@ -37,11 +42,16 @@ impl Event {
 pub struct OptionEvent {
     title: Option<String>,
     description: Option<String>,
-    year: Option<i32>,
-    month: Option<u32>,
-    day: Option<u32>,
-    hour: Option<u32>,
-    minute: Option<u32>,
+    start_year: Option<i32>,
+    start_month: Option<u32>,
+    start_day: Option<u32>,
+    start_hour: Option<u32>,
+    start_minute: Option<u32>,
+    end_year: Option<i32>,
+    end_month: Option<u32>,
+    end_day: Option<u32>,
+    end_hour: Option<u32>,
+    end_minute: Option<u32>,
     timezone: Option<String>,
 }
 
@@ -49,11 +59,16 @@ impl OptionEvent {
     pub fn new(
         title: Option<String>,
         description: Option<String>,
-        year: Option<i32>,
-        month: Option<u32>,
-        day: Option<u32>,
-        hour: Option<u32>,
-        minute: Option<u32>,
+        start_year: Option<i32>,
+        start_month: Option<u32>,
+        start_day: Option<u32>,
+        start_hour: Option<u32>,
+        start_minute: Option<u32>,
+        end_year: Option<i32>,
+        end_month: Option<u32>,
+        end_day: Option<u32>,
+        end_hour: Option<u32>,
+        end_minute: Option<u32>,
         timezone: Option<String>,
     ) -> Self {
         OptionEvent {
@@ -71,11 +86,16 @@ impl OptionEvent {
                     Some(description)
                 }
             }),
-            year: year,
-            month: month,
-            day: day,
-            hour: hour,
-            minute: minute,
+            start_year: start_year,
+            start_month: start_month,
+            start_day: start_day,
+            start_hour: start_hour,
+            start_minute: start_minute,
+            end_year: end_year,
+            end_month: end_month,
+            end_day: end_day,
+            end_hour: end_hour,
+            end_minute: end_minute,
             timezone: timezone.and_then(|tz| if tz.trim().len() == 0 { None } else { Some(tz) }),
         }
     }
@@ -91,24 +111,44 @@ impl OptionEvent {
             v.push("description");
         }
 
-        if self.year.is_none() {
-            v.push("year");
+        if self.start_year.is_none() {
+            v.push("start year");
         }
 
-        if self.month.is_none() {
-            v.push("month");
+        if self.start_month.is_none() {
+            v.push("start month");
         }
 
-        if self.day.is_none() {
-            v.push("day");
+        if self.start_day.is_none() {
+            v.push("start day");
         }
 
-        if self.hour.is_none() {
-            v.push("hour");
+        if self.start_hour.is_none() {
+            v.push("start hour");
         }
 
-        if self.minute.is_none() {
-            v.push("minute");
+        if self.start_minute.is_none() {
+            v.push("start minute");
+        }
+
+        if self.end_year.is_none() {
+            v.push("start year");
+        }
+
+        if self.end_month.is_none() {
+            v.push("start month");
+        }
+
+        if self.end_day.is_none() {
+            v.push("start day");
+        }
+
+        if self.end_hour.is_none() {
+            v.push("start hour");
+        }
+
+        if self.end_minute.is_none() {
+            v.push("start minute");
         }
 
         if self.timezone.is_none() {
@@ -122,11 +162,16 @@ impl OptionEvent {
 pub struct CreateEvent {
     pub title: String,
     pub description: String,
-    pub year: i32,
-    pub month: u32,
-    pub day: u32,
-    pub hour: u32,
-    pub minute: u32,
+    pub start_year: i32,
+    pub start_month: u32,
+    pub start_day: u32,
+    pub start_hour: u32,
+    pub start_minute: u32,
+    pub end_year: i32,
+    pub end_month: u32,
+    pub end_day: u32,
+    pub end_hour: u32,
+    pub end_minute: u32,
     pub timezone: String,
 }
 
@@ -135,11 +180,16 @@ impl CreateEvent {
         CreateEvent {
             title: "".to_owned(),
             description: "".to_owned(),
-            year: date.year(),
-            month: date.month() - 1,
-            day: date.day() as u32,
-            hour: date.hour() as u32,
-            minute: date.minute() as u32,
+            start_year: date.year(),
+            start_month: date.month() - 1,
+            start_day: date.day() as u32,
+            start_hour: date.hour() as u32,
+            start_minute: date.minute() as u32,
+            end_year: date.year(),
+            end_month: date.month() - 1,
+            end_day: date.day() as u32,
+            end_hour: date.hour() as u32,
+            end_minute: date.minute() as u32,
             timezone: date.timezone().name().to_owned(),
         }
     }
@@ -153,24 +203,44 @@ impl CreateEvent {
             self.description = description.to_owned();
         }
 
-        if let Some(year) = option_event.year {
-            self.year = year;
+        if let Some(start_year) = option_event.start_year {
+            self.start_year = start_year;
         }
 
-        if let Some(month) = option_event.month {
-            self.month = month;
+        if let Some(start_month) = option_event.start_month {
+            self.start_month = start_month;
         }
 
-        if let Some(day) = option_event.day {
-            self.day = day;
+        if let Some(start_day) = option_event.start_day {
+            self.start_day = start_day;
         }
 
-        if let Some(hour) = option_event.hour {
-            self.hour = hour;
+        if let Some(start_hour) = option_event.start_hour {
+            self.start_hour = start_hour;
         }
 
-        if let Some(minute) = option_event.minute {
-            self.minute = minute;
+        if let Some(start_minute) = option_event.start_minute {
+            self.start_minute = start_minute;
+        }
+
+        if let Some(end_year) = option_event.end_year {
+            self.end_year = end_year;
+        }
+
+        if let Some(end_month) = option_event.end_month {
+            self.end_month = end_month;
+        }
+
+        if let Some(end_day) = option_event.end_day {
+            self.end_day = end_day;
+        }
+
+        if let Some(end_hour) = option_event.end_hour {
+            self.end_hour = end_hour;
+        }
+
+        if let Some(end_minute) = option_event.end_minute {
+            self.end_minute = end_minute;
         }
 
         if let Some(ref timezone) = option_event.timezone {
@@ -184,21 +254,31 @@ impl CreateEvent {
             maybe_field(option_event.description, "description")?,
             "description",
         )?;
-        let year = maybe_field(option_event.year, "year")?;
-        let month = maybe_field(option_event.month, "month")?;
-        let day = maybe_field(option_event.day, "day")?;
-        let hour = maybe_field(option_event.hour, "hour")?;
-        let minute = maybe_field(option_event.minute, "minute")?;
+        let start_year = maybe_field(option_event.start_year, "start_year")?;
+        let start_month = maybe_field(option_event.start_month, "start_month")?;
+        let start_day = maybe_field(option_event.start_day, "start_day")?;
+        let start_hour = maybe_field(option_event.start_hour, "start_hour")?;
+        let start_minute = maybe_field(option_event.start_minute, "start_minute")?;
+        let end_year = maybe_field(option_event.end_year, "end_year")?;
+        let end_month = maybe_field(option_event.end_month, "end_month")?;
+        let end_day = maybe_field(option_event.end_day, "end_day")?;
+        let end_hour = maybe_field(option_event.end_hour, "end_hour")?;
+        let end_minute = maybe_field(option_event.end_minute, "end_minute")?;
         let timezone = maybe_field(option_event.timezone, "timezone")?;
 
         Ok(CreateEvent {
             title,
             description,
-            year,
-            month,
-            day,
-            hour,
-            minute,
+            start_year,
+            start_month,
+            start_day,
+            start_hour,
+            start_minute,
+            end_year,
+            end_month,
+            end_day,
+            end_hour,
+            end_minute,
             timezone,
         })
     }
@@ -209,16 +289,30 @@ impl CreateEvent {
         let now = Utc::now();
 
         let datetime = now.with_timezone(&timezone);
-        let datetime = datetime
-            .with_year(self.year)
+        let start_datetime = datetime
+            .with_year(self.start_year)
             .ok_or(FrontendErrorKind::BadYear)?
-            .with_month0(self.month)
+            .with_month0(self.start_month)
             .ok_or(FrontendErrorKind::BadMonth)?
-            .with_day(self.day)
+            .with_day(self.start_day)
             .ok_or(FrontendErrorKind::BadDay)?
-            .with_hour(self.hour)
+            .with_hour(self.start_hour)
             .ok_or(FrontendErrorKind::BadHour)?
-            .with_minute(self.minute)
+            .with_minute(self.start_minute)
+            .ok_or(FrontendErrorKind::BadMinute)?
+            .with_second(0)
+            .ok_or(FrontendErrorKind::BadSecond)?;
+
+        let end_datetime = datetime
+            .with_year(self.end_year)
+            .ok_or(FrontendErrorKind::BadYear)?
+            .with_month0(self.end_month)
+            .ok_or(FrontendErrorKind::BadMonth)?
+            .with_day(self.end_day)
+            .ok_or(FrontendErrorKind::BadDay)?
+            .with_hour(self.end_hour)
+            .ok_or(FrontendErrorKind::BadHour)?
+            .with_minute(self.end_minute)
             .ok_or(FrontendErrorKind::BadMinute)?
             .with_second(0)
             .ok_or(FrontendErrorKind::BadSecond)?;
@@ -226,7 +320,8 @@ impl CreateEvent {
         Ok(Event {
             title: self.title,
             description: self.description,
-            datetime: datetime,
+            start_date: start_datetime,
+            end_date: end_datetime,
         })
     }
 }
