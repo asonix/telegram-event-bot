@@ -1,5 +1,6 @@
 body {
-    background-color: #e5e5e5;
+    background-color: #fff;
+    font-family: sans;
 }
 
 section {
@@ -7,7 +8,10 @@ section {
     margin: 0 auto;
     background-color: #fff;
     padding: 1.5em;
-    box-shadow: 0 3px 3px #999;
+}
+
+form {
+    position: relative;
 }
 
 form div {
@@ -17,14 +21,11 @@ form div {
     margin: auto;
 }
 
-h1 {
-    font-size: 1.5em;
-    margin: 0 0 1em 0;
-}
-
 fieldset {
     display: block;
     margin: 1em 0;
+    border: 0;
+    padding: 0;
 }
 
 fieldset#first {
@@ -36,6 +37,7 @@ fieldset#second {
 }
 
 legend h1 {
+    font-size: 1.5em;
     margin: 0;
 }
 
@@ -63,4 +65,6 @@ textarea {
 
 input[type=submit] {
     padding: 0.5em 1em;
+    position: absolute;
+    right: 0;
 }
