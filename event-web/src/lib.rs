@@ -226,7 +226,7 @@ where
     )).resource("/events/new/{secret}", |r| {
         r.method(Method::GET).f(new_form);
         r.method(Method::POST).f(submitted);
-    })
+    }).handler("/assets/", fs::StaticFiles::new("assets/", true))
 }
 
 pub fn start<T>(handler: SyncAddress<T>, addr: &str, prefix: Option<&'static str>)

@@ -22,7 +22,7 @@ impl Handler<NewEvent> for MyHandler {
 fn main() {
     let sys = System::new("womp");
 
-    event_web::start(MyHandler.start(), "127.0.0.1:8080", None);
+    event_web::start(MyHandler.start(), "127.0.0.1:8000", None);
 
     sys.run();
 }
