@@ -48,4 +48,11 @@ impl UsersActor {
             UserState::NewUser
         }
     }
+
+    fn lookup_chats(&mut self, user_id: Integer) -> HashSet<Integer> {
+        self.users
+            .get(&user_id)
+            .map(|chats| chats.clone())
+            .unwrap_or(HashSet::new())
+    }
 }

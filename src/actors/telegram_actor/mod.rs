@@ -1,15 +1,18 @@
+use std::collections::HashSet;
+
 use actix::Address;
 use chrono::{DateTime, Datelike, TimeZone, Weekday};
 use chrono_tz::US::Central;
 use failure::Fail;
-use futures::Future;
+use futures::{Future, Stream};
+use futures::stream::iter_ok;
 use telebot::RcBot;
-use telebot::functions::FunctionMessage;
-// use telebot::objects::{InlineKeyboardButton, InlineKeyboardMarkup, Integer};
+use telebot::functions::{FunctionGetChat, FunctionMessage};
+use telebot::objects::{InlineKeyboardButton, InlineKeyboardMarkup, Integer};
 
 use actors::db_broker::DbBroker;
 use actors::db_actor::messages::{GetChatSystemByEventId, GetEventsForSystem, LookupSystem};
-use error::EventErrorKind;
+use error::{EventError, EventErrorKind};
 use models::chat_system::ChatSystem;
 use models::event::Event;
 
@@ -102,6 +105,36 @@ impl TelegramActor {
 
         self.bot.inner.handle.spawn(fut.map(|_| ()).map_err(|_| ()));
     }
+
+    fn ask_chats(&self, chats: HashSet<Integer>, chat_id: Integer) {
+        let bot = self.bot.clone();
+        let bot2 = bot.clone();
+
+        let fut = iter_ok(chats)
+            .and_then(move |chat_id| {
+                bot.clone()
+                    .get_chat(chat_id)
+                    .send()
+                    .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
+            })
+            .map(|(_, chat)| {
+                InlineKeyboardButton::new(
+                    chat.title
+                        .unwrap_or(chat.username.unwrap_or("No title".to_owned())),
+                ).callback_data(format!("{}", chat.id))
+            })
+            .collect()
+            .and_then(move |buttons| {
+                bot2.message(
+                    chat_id,
+                    "Which chat would you like to create an event for?".to_owned(),
+                ).reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                    .send()
+                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
+            });
+
+        self.bot.inner.handle.spawn(fut.map(|_| ()).map_err(|_| ()));
+    }
 }
 
 fn format_date<T>(localtime: DateTime<T>) -> String
@@ -143,29 +176,3 @@ where
 
     format!("{}, {} {}{}", weekday, month, localtime.day(), day)
 }
-
-/*
-fn month_button(month: i32) -> InlineKeyboardButton {
-    let month_name = match month {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "Unknown",
-    };
-
-    InlineKeyboardButton::new(month_name.to_owned()).callback_data(format!("{}", month))
-}
-
-fn day_button(day: i32) -> InlineKeyboardButton {
-    InlineKeyboardButton::new(format!("{}", day)).callback_data(format!("{}", day))
-}
-*/

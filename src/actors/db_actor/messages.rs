@@ -7,6 +7,7 @@ use error::EventError;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;
 use models::event::Event;
+use models::new_event_link::NewEventLink;
 use models::user::User;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -129,9 +130,48 @@ impl ResponseType for GetEventsForSystem {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct LookupUser(pub Integer);
+
+impl ResponseType for LookupUser {
+    type Item = User;
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct GetUsersWithChats;
 
 impl ResponseType for GetUsersWithChats {
     type Item = Vec<(User, Chat)>;
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug)]
+pub struct StoreEventLink {
+    pub user_id: i32,
+    pub secret: String,
+}
+
+impl ResponseType for StoreEventLink {
+    type Item = NewEventLink;
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct EventLinkByUserId {
+    pub user_id: i32,
+}
+
+impl ResponseType for EventLinkByUserId {
+    type Item = NewEventLink;
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DeleteEventLink {
+    pub id: i32,
+}
+
+impl ResponseType for DeleteEventLink {
+    type Item = ();
     type Error = EventError;
 }

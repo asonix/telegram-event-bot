@@ -56,6 +56,7 @@ pub enum EventErrorKind {
     #[fail(display = "No connection in DbActor")] MissingConnection,
     #[fail(display = "Failed passing message")] Canceled,
     #[fail(display = "Failed to send telegram message")] Telegram,
+    #[fail(display = "Failed to lookup telegram item")] TelegramLookup,
     #[fail(display = "Failed to get a connection to the database")] NoAvailableConnection,
     #[fail(display = "Failed to find event-builder")] MissingEvent,
 }

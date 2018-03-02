@@ -2,6 +2,7 @@
 
 extern crate actix;
 extern crate dotenv;
+extern crate env_logger;
 extern crate event_bot;
 extern crate event_web;
 extern crate futures;
@@ -11,6 +12,7 @@ extern crate tokio_core;
 use actix::{Actor, Address, Arbiter, System};
 use dotenv::dotenv;
 use event_bot::actors::db_broker::DbBroker;
+use event_bot::actors::event_actor::EventActor;
 use event_bot::actors::telegram_actor::TelegramActor;
 use event_bot::actors::telegram_message_actor::TelegramMessageActor;
 use event_bot::actors::users_actor::UsersActor;
@@ -26,6 +28,8 @@ fn bot_token() -> String {
 }
 
 fn main() {
+    env_logger::init();
+
     let sys = System::new("tg-event-system");
     let _ = Arbiter::new("one");
 
@@ -41,9 +45,11 @@ fn main() {
 
     let tg: Address<_> = TelegramActor::new(actor_bot, db_broker.clone()).start();
 
+    let event_actor: Address<_> = EventActor::new(tg.clone(), db_broker.clone()).start();
+
     let msg_actor_bot = RcBot::new(Arbiter::handle().clone(), &bot_token);
     let _: Address<_> =
-        TelegramMessageActor::new(msg_actor_bot, db_broker, tg, users_actor).start();
+        TelegramMessageActor::new(msg_actor_bot, db_broker, tg, users_actor, event_actor).start();
 
     sys.run();
 }

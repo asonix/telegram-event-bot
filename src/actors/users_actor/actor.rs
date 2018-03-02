@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
 use actix::{Actor, AsyncContext, Context, Handler};
 use failure::Fail;
 use futures::{Future, Stream};
 use futures::stream::iter_ok;
+use telebot::objects::Integer;
 
 use error::{EventError, EventErrorKind};
 use actors::db_actor::messages::GetUsersWithChats;
@@ -51,5 +54,13 @@ impl Handler<TouchUser> for UsersActor {
 
     fn handle(&mut self, msg: TouchUser, _: &mut Self::Context) -> Self::Result {
         Ok(self.touch_user(msg.0, msg.1))
+    }
+}
+
+impl Handler<LookupChats> for UsersActor {
+    type Result = Result<HashSet<Integer>, EventError>;
+
+    fn handle(&mut self, msg: LookupChats, _: &mut Self::Context) -> Self::Result {
+        Ok(self.lookup_chats(msg.0))
     }
 }

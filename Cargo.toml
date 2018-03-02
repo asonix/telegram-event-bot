@@ -5,13 +5,17 @@ authors = ["Riley Trautman <rileyt@spiceworks.com>"]
 
 [dependencies]
 actix = "0.4"
+base64 = "0.9.0"
 chrono = "0.4"
 chrono-tz = "0.4"
 dotenv = "0.10"
+env_logger = "0.5"
 failure = "0.1"
 failure_derive = "0.1"
 futures = "0.1"
 futures-state-stream = "0.2"
+log = "0.4"
+rand = "0.4"
 time = "0.1"
 telebot = { git = "https://github.com/asonix/telebot", branch = "asonix/hyper" }
 tokio-core = "0.1"
@@ -24,6 +28,3 @@ features = ["with-chrono"]
 [dependencies.event-web]
 version = "0.1"
 path = "./event-web"
-
-[dev-dependencies]
-rand = "0.4"

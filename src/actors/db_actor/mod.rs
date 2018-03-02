@@ -9,6 +9,7 @@ use actors::db_broker::DbBroker;
 use models::event::{CreateEvent, Event};
 use models::chat::{Chat, CreateChat};
 use models::chat_system::ChatSystem;
+use models::new_event_link::NewEventLink;
 use models::user::{CreateUser, User};
 
 use error::{EventError, EventErrorKind};
@@ -277,5 +278,67 @@ impl DbActor {
                 .map_err(Err)
                 .and_then(move |connection| User::get_with_chats(connection).map_err(Ok)),
         )
+    }
+
+    fn store_event_link(
+        &mut self,
+        user_id: i32,
+        secret: String,
+    ) -> impl Future<
+        Item = (NewEventLink, Connection),
+        Error = Result<(EventError, Connection), EventError>,
+    > {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| {
+                NewEventLink::create(user_id, secret, connection).map_err(Ok)
+            })
+    }
+
+    fn get_event_link_by_user_id(
+        &mut self,
+        user_id: i32,
+    ) -> impl Future<
+        Item = (NewEventLink, Connection),
+        Error = Result<(EventError, Connection), EventError>,
+    > {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| NewEventLink::by_user_id(user_id, connection).map_err(Ok))
+    }
+
+    fn delete_event_link(
+        &mut self,
+        id: i32,
+    ) -> impl Future<Item = ((), Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| NewEventLink::delete(id, connection).map_err(Ok))
+            .map(|c| ((), c))
+    }
+
+    fn lookup_user(
+        &mut self,
+        user_id: Integer,
+    ) -> impl Future<Item = (User, Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| {
+                User::by_ids(vec![user_id], connection)
+                    .and_then(|(mut users, connection)| {
+                        if users.len() > 0 {
+                            Ok((users.remove(0), connection))
+                        } else {
+                            Err((EventErrorKind::Lookup.into(), connection))
+                        }
+                    })
+                    .map_err(Ok)
+            })
     }
 }

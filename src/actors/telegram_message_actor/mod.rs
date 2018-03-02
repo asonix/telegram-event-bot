@@ -1,14 +1,16 @@
 use actix::{Address, Arbiter};
 use failure::Fail;
 use futures::Future;
-use telebot::objects::{Message, Update};
+use telebot::objects::{CallbackQuery, Integer, Message, Update};
 use telebot::RcBot;
 
-use actors::db_actor::messages::{NewRelation, NewUser};
+use actors::db_actor::messages::{LookupUser, NewRelation, NewUser};
 use actors::db_broker::DbBroker;
+use actors::event_actor::EventActor;
 use actors::telegram_actor::TelegramActor;
+use actors::telegram_actor::messages::AskChats;
 use actors::users_actor::{UserState, UsersActor};
-use actors::users_actor::messages::TouchUser;
+use actors::users_actor::messages::{LookupChats, TouchUser};
 use error::EventErrorKind;
 
 mod actor;
@@ -19,6 +21,7 @@ pub struct TelegramMessageActor {
     db: Address<DbBroker>,
     tg: Address<TelegramActor>,
     users: Address<UsersActor>,
+    event: Address<EventActor>,
 }
 
 impl TelegramMessageActor {
@@ -27,13 +30,24 @@ impl TelegramMessageActor {
         db: Address<DbBroker>,
         tg: Address<TelegramActor>,
         users: Address<UsersActor>,
+        event: Address<EventActor>,
     ) -> Self {
-        TelegramMessageActor { bot, db, tg, users }
+        TelegramMessageActor {
+            bot,
+            db,
+            tg,
+            users,
+            event,
+        }
     }
 
     fn handle_update(&self, update: Update) {
+        println!("Update: {:?}", update);
+
         if let Some(msg) = update.message {
             self.handle_message(msg);
+        } else if let Some(callback_query) = update.callback_query {
+            self.handle_callback_query(callback_query);
         }
     }
 
@@ -63,8 +77,70 @@ impl TelegramMessageActor {
                                 _ => (),
                             })
                         })
-                        .map_err(|_| ()),
+                        .map_err(|e| error!("Error: {:?}", e)),
                 );
+            } else {
+                if let Some(text) = message.text {
+                    if text.starts_with("/new") {
+                        let tg = self.tg.clone();
+                        let chat_id = message.chat.id;
+
+                        Arbiter::handle().spawn(
+                            self.users
+                                .call_fut(LookupChats(user.id))
+                                .then(|msg_res| match msg_res {
+                                    Ok(res) => res,
+                                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
+                                })
+                                .map(move |chats| tg.send(AskChats(chats, chat_id)))
+                                .map_err(|e| error!("Error: {:?}", e)),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_callback_query(&self, callback_query: CallbackQuery) {
+        use actors::db_actor::messages::StoreEventLink;
+        use base64::encode;
+        use event_web::generate_secret;
+        use rand::Rng;
+        use rand::os::OsRng;
+
+        let user_id = callback_query.from.id;
+
+        if let Some(data) = callback_query.data {
+            if let Ok(chat_id) = data.parse::<Integer>() {
+                if let Ok(mut rng) = OsRng::new() {
+                    let mut bytes = [0; 8];
+
+                    rng.fill_bytes(&mut bytes);
+                    let base64d = encode(&bytes);
+
+                    if let Ok(secret) = generate_secret(&base64d) {
+                        let db = self.db.clone();
+
+                        let fut = self.db
+                            .call_fut(LookupUser(user_id))
+                            .then(|msg_res| match msg_res {
+                                Ok(res) => res,
+                                Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
+                            })
+                            .and_then(move |user| {
+                                db.call_fut(StoreEventLink {
+                                    user_id: user.id(),
+                                    secret,
+                                }).then(|msg_res| match msg_res {
+                                    Ok(res) => res,
+                                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
+                                })
+                            });
+
+                        Arbiter::handle()
+                            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+                    }
+                }
             }
         }
     }

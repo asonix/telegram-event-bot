@@ -114,6 +114,38 @@ impl Handler<GetUsersWithChats> for DbActor {
     }
 }
 
+impl Handler<StoreEventLink> for DbActor {
+    type Result = ResponseFuture<Self, StoreEventLink>;
+
+    fn handle(&mut self, msg: StoreEventLink, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.store_event_link(msg.user_id, msg.secret))
+    }
+}
+
+impl Handler<EventLinkByUserId> for DbActor {
+    type Result = ResponseFuture<Self, EventLinkByUserId>;
+
+    fn handle(&mut self, msg: EventLinkByUserId, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_event_link_by_user_id(msg.user_id))
+    }
+}
+
+impl Handler<DeleteEventLink> for DbActor {
+    type Result = ResponseFuture<Self, DeleteEventLink>;
+
+    fn handle(&mut self, msg: DeleteEventLink, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.delete_event_link(msg.id))
+    }
+}
+
+impl Handler<LookupUser> for DbActor {
+    type Result = ResponseFuture<Self, LookupUser>;
+
+    fn handle(&mut self, msg: LookupUser, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.lookup_user(msg.0))
+    }
+}
+
 impl DbActor {
     fn wrap_fut<I, F>(fut: F) -> Box<ActorFuture<Item = I, Error = EventError, Actor = Self>>
     where

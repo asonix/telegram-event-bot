@@ -1,6 +1,7 @@
 pub mod chat;
 pub mod chat_system;
 pub mod event;
+pub mod new_event_link;
 pub mod user;
 mod util;
 
@@ -12,10 +13,10 @@ mod tests {
     use tokio_core::reactor::Core;
     use tokio_postgres::Connection;
 
+    use conn::database_connection;
     use error::{EventError, EventErrorKind};
     use super::chat::{Chat, CreateChat};
     use super::chat_system::ChatSystem;
-    use super::conn::database_connection;
     use super::event::{CreateEvent, Event};
     use super::user::{CreateUser, User};
 

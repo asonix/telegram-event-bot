@@ -22,3 +22,11 @@ impl Handler<EventOver> for TelegramActor {
         self.query_events(msg.event_id, msg.system_id);
     }
 }
+
+impl Handler<AskChats> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: AskChats, _: &mut Self::Context) -> Self::Result {
+        self.ask_chats(msg.0, msg.1)
+    }
+}

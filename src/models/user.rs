@@ -58,7 +58,7 @@ impl User {
             .0
             .join(", ");
 
-        let full_sql = format!("{} {}", sql, values);
+        let full_sql = format!("{} ({})", sql, values);
 
         Box::new(
             connection
