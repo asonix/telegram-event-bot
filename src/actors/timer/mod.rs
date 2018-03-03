@@ -61,7 +61,7 @@ impl Timer {
                     Arbiter::handle().spawn(
                         TokioTimer::default()
                             .sleep(Duration::from_secs(duration as u64))
-                            .map_err(|_| ())
+                            .map_err(|e| error!("Error: {:?}", e))
                             .and_then(move |_| {
                                 db.send(DeleteEvent { event_id });
                                 tg.send(EventOver {
@@ -97,7 +97,7 @@ impl Timer {
                     Arbiter::handle().spawn(
                         TokioTimer::default()
                             .sleep(Duration::from_secs(duration as u64))
-                            .map_err(|_| ())
+                            .map_err(|e| error!("Error: {:?}", e))
                             .and_then(move |_| {
                                 tg.send(NotifyEvent(event));
                                 Ok(())

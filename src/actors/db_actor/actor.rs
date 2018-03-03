@@ -56,7 +56,7 @@ impl Handler<NewEvent> for DbActor {
 
     fn handle(&mut self, msg: NewEvent, _: &mut Self::Context) -> Self::Result {
         DbActor::wrap_fut(self.insert_event(
-            msg.channel_id,
+            msg.system_id,
             msg.title,
             msg.description,
             msg.start_date,
@@ -98,6 +98,14 @@ impl Handler<LookupSystem> for DbActor {
     }
 }
 
+impl Handler<LookupSystemByChannel> for DbActor {
+    type Result = ResponseFuture<Self, LookupSystemByChannel>;
+
+    fn handle(&mut self, msg: LookupSystemByChannel, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_system_by_channel(msg.0))
+    }
+}
+
 impl Handler<GetEventsForSystem> for DbActor {
     type Result = ResponseFuture<Self, GetEventsForSystem>;
 
@@ -118,7 +126,7 @@ impl Handler<StoreEventLink> for DbActor {
     type Result = ResponseFuture<Self, StoreEventLink>;
 
     fn handle(&mut self, msg: StoreEventLink, _: &mut Self::Context) -> Self::Result {
-        DbActor::wrap_fut(self.store_event_link(msg.user_id, msg.secret))
+        DbActor::wrap_fut(self.store_event_link(msg.user_id, msg.system_id, msg.secret))
     }
 }
 
@@ -143,6 +151,14 @@ impl Handler<LookupUser> for DbActor {
 
     fn handle(&mut self, msg: LookupUser, _: &mut Self::Context) -> Self::Result {
         DbActor::wrap_fut(self.lookup_user(msg.0))
+    }
+}
+
+impl Handler<GetSystemsWithChats> for DbActor {
+    type Result = ResponseFuture<Self, GetSystemsWithChats>;
+
+    fn handle(&mut self, _: GetSystemsWithChats, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_systems_with_chats())
     }
 }
 

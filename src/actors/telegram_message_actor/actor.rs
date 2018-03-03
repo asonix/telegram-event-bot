@@ -1,4 +1,4 @@
-use actix::{Actor, ActorContext, AsyncContext, Context, Handler};
+use actix::{Actor, ActorContext, Address, Arbiter, AsyncContext, Context, Handler, Supervised};
 use futures::{Future, Stream};
 use futures::stream::{iter_ok, repeat};
 use telebot::functions::*;
@@ -12,8 +12,15 @@ use super::TelegramMessageActor;
 impl Actor for TelegramMessageActor {
     type Context = Context<Self>;
 
-    fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.add_stream(bot_stream(self.bot.clone()).map(|(bot, update)| TgUpdate { bot, update }));
+    fn started(&mut self, _: &mut Self::Context) {
+        debug!("Started telegram message actor");
+    }
+}
+
+impl Supervised for TelegramMessageActor {
+    fn restarting(&mut self, _: &mut <Self as Actor>::Context) {
+        debug!("Restarting telegram message actor!");
+        self.bot = RcBot::new(Arbiter::handle().clone(), &self.bot.inner.key);
     }
 }
 
@@ -25,13 +32,32 @@ impl Handler<Result<TgUpdate, EventError>> for TelegramMessageActor {
         msg: Result<TgUpdate, EventError>,
         ctx: &mut Self::Context,
     ) -> Self::Result {
+        debug!("Handling update");
         match msg {
             Ok(tg_update) => self.handle_update(tg_update.update),
             Err(err) => {
-                println!("Error {:?}", err);
+                error!("Error {:?}", err);
                 ctx.stop();
             }
         }
+    }
+}
+
+impl Handler<StartStreaming> for TelegramMessageActor {
+    type Result = ();
+
+    fn handle(&mut self, _: StartStreaming, ctx: &mut Self::Context) -> Self::Result {
+        let addr: Address<_> = ctx.address();
+
+        Arbiter::handle().spawn(
+            bot_stream(self.bot.clone())
+                .then(move |res| match res {
+                    Ok((bot, update)) => addr.call_fut(Ok(TgUpdate { bot, update })),
+                    Err(e) => addr.call_fut(Err(e)),
+                })
+                .map_err(|e| error!("Error: {:?}", e))
+                .for_each(|_| Ok(())),
+        )
     }
 }
 
@@ -74,7 +100,7 @@ fn bot_stream(bot: RcBot) -> impl Stream<Item = (RcBot, Update), Error = EventEr
                     if let Some(msg) = update.message {
                         sender
                             .unbounded_send((bot.clone(), msg))
-                            .unwrap_or_else(|e| println!("Error: {}", e));
+                            .unwrap_or_else(|e| error!("Error: {}", e));
                     }
                 }
                 return None;

@@ -59,6 +59,7 @@ pub enum EventErrorKind {
     #[fail(display = "Failed to lookup telegram item")] TelegramLookup,
     #[fail(display = "Failed to get a connection to the database")] NoAvailableConnection,
     #[fail(display = "Failed to find event-builder")] MissingEvent,
+    #[fail(display = "Error on frontend")] Frontend,
 }
 
 /// Provide an error type for missing keys when constructing the database URL

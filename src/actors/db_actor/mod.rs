@@ -38,21 +38,19 @@ impl DbActor {
 
     fn insert_event(
         &mut self,
-        channel_id: Integer,
+        system_id: i32,
         title: String,
         description: String,
         start_date: DateTime<Utc>,
         end_date: DateTime<Utc>,
-        hosts: Vec<Integer>,
+        hosts: Vec<i32>,
     ) -> Box<Future<Item = (Event, Connection), Error = Result<(EventError, Connection), EventError>>>
     {
         Box::new(
             self.take_connection()
                 .into_future()
                 .map_err(Err)
-                .and_then(move |connection| {
-                    ChatSystem::by_channel_id(channel_id, connection).map_err(Ok)
-                })
+                .and_then(move |connection| ChatSystem::by_id(system_id, connection).map_err(Ok))
                 .and_then(move |(chat_system, connection)| {
                     User::by_ids(hosts, connection)
                         .map_err(Ok)
@@ -264,6 +262,19 @@ impl DbActor {
         )
     }
 
+    fn get_system_by_channel(
+        &mut self,
+        channel_id: Integer,
+    ) -> impl Future<Item = (ChatSystem, Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| {
+                ChatSystem::by_channel_id(channel_id, connection).map_err(Ok)
+            })
+    }
+
     fn get_users_with_chats(
         &mut self,
     ) -> Box<
@@ -283,6 +294,7 @@ impl DbActor {
     fn store_event_link(
         &mut self,
         user_id: i32,
+        system_id: i32,
         secret: String,
     ) -> impl Future<
         Item = (NewEventLink, Connection),
@@ -292,7 +304,7 @@ impl DbActor {
             .into_future()
             .map_err(Err)
             .and_then(move |connection| {
-                NewEventLink::create(user_id, secret, connection).map_err(Ok)
+                NewEventLink::create(user_id, system_id, secret, connection).map_err(Ok)
             })
     }
 
@@ -330,7 +342,7 @@ impl DbActor {
             .into_future()
             .map_err(Err)
             .and_then(move |connection| {
-                User::by_ids(vec![user_id], connection)
+                User::by_user_ids(vec![user_id], connection)
                     .and_then(|(mut users, connection)| {
                         if users.len() > 0 {
                             Ok((users.remove(0), connection))
@@ -340,5 +352,17 @@ impl DbActor {
                     })
                     .map_err(Ok)
             })
+    }
+
+    fn get_systems_with_chats(
+        &mut self,
+    ) -> impl Future<
+        Item = (Vec<(ChatSystem, Chat)>, Connection),
+        Error = Result<(EventError, Connection), EventError>,
+    > {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| ChatSystem::all_with_chats(connection).map_err(Ok))
     }
 }

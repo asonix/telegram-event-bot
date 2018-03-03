@@ -1,13 +1,14 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
 
 use actix::Address;
-use chrono::{DateTime, Datelike, TimeZone, Weekday};
+use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
 use chrono_tz::US::Central;
 use failure::Fail;
 use futures::{Future, Stream};
 use futures::stream::iter_ok;
 use telebot::RcBot;
-use telebot::functions::{FunctionGetChat, FunctionMessage};
+use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage};
 use telebot::objects::{InlineKeyboardButton, InlineKeyboardMarkup, Integer};
 
 use actors::db_broker::DbBroker;
@@ -48,7 +49,46 @@ impl TelegramActor {
                     .map_err(|e| e.context(EventErrorKind::Telegram).into())
             })
             .map(|_| ())
-            .map_err(|_| ());
+            .map_err(|e| error!("Error: {:?}", e));
+
+        self.bot.inner.handle.spawn(fut);
+    }
+
+    fn new_event(&self, event: Event) {
+        let localtime = event.start_date().with_timezone(&Central);
+        let when = format_date(localtime);
+        let hosts = event
+            .hosts()
+            .iter()
+            .map(|host| format!("{}", host.user_id()))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let bot = self.bot.clone();
+
+        let fut = self.db
+            .call_fut(GetChatSystemByEventId {
+                event_id: event.id(),
+            })
+            .then(|msg_res| match msg_res {
+                Ok(res) => res,
+                Err(err) => Err(err.context(EventErrorKind::Canceled).into()),
+            })
+            .and_then(move |chat_system| {
+                bot.message(
+                    chat_system.events_channel(),
+                    format!(
+                        "{}\nWhen: {}\nDescription: {}\nHosts: {}",
+                        event.title(),
+                        when,
+                        event.description(),
+                        hosts
+                    ),
+                ).send()
+                    .map_err(|e| e.context(EventErrorKind::Telegram).into())
+            })
+            .map(|_| ())
+            .map_err(|e| error!("Error: {:?}", e));
 
         self.bot.inner.handle.spawn(fut);
     }
@@ -103,7 +143,10 @@ impl TelegramActor {
                     })
             });
 
-        self.bot.inner.handle.spawn(fut.map(|_| ()).map_err(|_| ()));
+        self.bot
+            .inner
+            .handle
+            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
     }
 
     fn ask_chats(&self, chats: HashSet<Integer>, chat_id: Integer) {
@@ -133,13 +176,105 @@ impl TelegramActor {
                     .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
             });
 
-        self.bot.inner.handle.spawn(fut.map(|_| ()).map_err(|_| ()));
+        self.bot
+            .inner
+            .handle
+            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+    }
+
+    fn is_admin(
+        &mut self,
+        channel_id: Integer,
+        chat_ids: Vec<Integer>,
+    ) -> impl Future<Item = Vec<Integer>, Error = EventError> {
+        self.bot
+            .unban_chat_administrators(channel_id)
+            .send()
+            .map_err(|e| EventError::from(e.context(EventErrorKind::TelegramLookup)))
+            .and_then(move |(bot, admins)| {
+                let channel_admins = admins
+                    .into_iter()
+                    .map(|admin| admin.user.id)
+                    .collect::<HashSet<_>>();
+
+                iter_ok(chat_ids)
+                    .and_then(move |chat_id| {
+                        bot.unban_chat_administrators(chat_id)
+                            .send()
+                            .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
+                            .map(move |(bot, admins)| (bot, admins, chat_id))
+                    })
+                    .filter_map(move |(_, admins, chat_id)| {
+                        if admins
+                            .into_iter()
+                            .any(|admin| channel_admins.contains(&admin.user.id))
+                        {
+                            Some(chat_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+    }
+
+    fn linked(&mut self, channel_id: Integer, chat_ids: Vec<Integer>) {
+        let msg = format!(
+            "Linked channel '{}' to chats ({})",
+            channel_id,
+            chat_ids
+                .into_iter()
+                .map(|id| format!("{}", id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(channel_id, msg)
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn print_id(&mut self, chat_id: Integer) {
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(chat_id, format!("{}", chat_id))
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn created_channel(&mut self, chat_id: Integer) {
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(chat_id, format!("Initialized"))
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn send_url(&mut self, chat_id: Integer, url: String) {
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(
+                    chat_id,
+                    format!("Use this link to create your event: {}", url),
+                )
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        )
     }
 }
 
 fn format_date<T>(localtime: DateTime<T>) -> String
 where
-    T: TimeZone,
+    T: TimeZone + Debug,
 {
     let weekday = match localtime.weekday() {
         Weekday::Mon => "Monday",
@@ -174,5 +309,14 @@ where
         _ => "th",
     };
 
-    format!("{}, {} {}{}", weekday, month, localtime.day(), day)
+    format!(
+        "{}:{} {:?}, {}, {} {}{}",
+        localtime.hour(),
+        localtime.minute(),
+        localtime.timezone(),
+        weekday,
+        month,
+        localtime.day(),
+        day
+    )
 }

@@ -42,10 +42,10 @@ impl User {
         self.user_id
     }
 
-    pub fn by_ids(
+    pub fn by_user_ids(
         user_ids: Vec<Integer>,
         connection: Connection,
-    ) -> Box<Future<Item = (Vec<User>, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Vec<User>, Connection), Error = (EventError, Connection)> {
         let sql = "SELECT usr.id, usr.user_id FROM users AS usr WHERE usr.user_id IN";
 
         let values = user_ids
@@ -60,23 +60,53 @@ impl User {
 
         let full_sql = format!("{} ({})", sql, values);
 
-        Box::new(
-            connection
-                .prepare(&full_sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    let sql_args: Vec<_> =
-                        user_ids.iter().map(|user_id| user_id as &ToSql).collect();
-                    connection
-                        .query(&s, sql_args.as_slice())
-                        .map(move |row| User {
-                            id: row.get(0),
-                            user_id: row.get(1),
-                        })
-                        .collect()
-                        .map_err(lookup_error)
-                }),
-        )
+        connection
+            .prepare(&full_sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                let sql_args: Vec<_> = user_ids.iter().map(|user_id| user_id as &ToSql).collect();
+                connection
+                    .query(&s, sql_args.as_slice())
+                    .map(move |row| User {
+                        id: row.get(0),
+                        user_id: row.get(1),
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+            })
+    }
+
+    pub fn by_ids(
+        ids: Vec<i32>,
+        connection: Connection,
+    ) -> impl Future<Item = (Vec<User>, Connection), Error = (EventError, Connection)> {
+        let sql = "SELECT usr.id, usr.user_id FROM users AS usr WHERE usr.id IN";
+
+        let values = ids.iter()
+            .fold((Vec::new(), 1), |(mut acc, count), _| {
+                acc.push(format!("${}", count));
+
+                (acc, count + 1)
+            })
+            .0
+            .join(", ");
+
+        let full_sql = format!("{} ({})", sql, values);
+
+        connection
+            .prepare(&full_sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                let sql_args: Vec<_> = ids.iter().map(|id| id as &ToSql).collect();
+                connection
+                    .query(&s, sql_args.as_slice())
+                    .map(move |row| User {
+                        id: row.get(0),
+                        user_id: row.get(1),
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+            })
     }
 
     pub fn get_systems(

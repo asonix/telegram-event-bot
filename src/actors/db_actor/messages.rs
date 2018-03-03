@@ -65,12 +65,12 @@ impl ResponseType for DeleteChannel {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NewEvent {
-    pub channel_id: Integer,
+    pub system_id: i32,
     pub title: String,
     pub description: String,
     pub start_date: DateTime<Utc>,
     pub end_date: DateTime<Utc>,
-    pub hosts: Vec<Integer>,
+    pub hosts: Vec<i32>,
 }
 
 impl ResponseType for NewEvent {
@@ -120,6 +120,14 @@ impl ResponseType for LookupSystem {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct LookupSystemByChannel(pub Integer);
+
+impl ResponseType for LookupSystemByChannel {
+    type Item = ChatSystem;
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GetEventsForSystem {
     pub system_id: i32,
 }
@@ -148,6 +156,7 @@ impl ResponseType for GetUsersWithChats {
 #[derive(Clone, Debug)]
 pub struct StoreEventLink {
     pub user_id: i32,
+    pub system_id: i32,
     pub secret: String,
 }
 
@@ -173,5 +182,13 @@ pub struct DeleteEventLink {
 
 impl ResponseType for DeleteEventLink {
     type Item = ();
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GetSystemsWithChats;
+
+impl ResponseType for GetSystemsWithChats {
+    type Item = Vec<(ChatSystem, Chat)>;
     type Error = EventError;
 }

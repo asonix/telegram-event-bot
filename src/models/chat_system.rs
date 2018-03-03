@@ -225,6 +225,34 @@ impl ChatSystem {
         )
     }
 
+    pub fn all_with_chats(
+        connection: Connection,
+    ) -> impl Future<Item = (Vec<(ChatSystem, Chat)>, Connection), Error = (EventError, Connection)>
+    {
+        let sql = "SELECT sys.id, sys.events_channel, ch.id, ch.chat_id
+            FROM chats AS ch
+            INNER JOIN chat_systems AS sys ON ch.system_id = sys.id";
+
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[])
+                    .map(|row| {
+                        (
+                            ChatSystem {
+                                id: row.get(0),
+                                events_channel: row.get(1),
+                            },
+                            Chat::from_parts(row.get(2), row.get(3)),
+                        )
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+            })
+    }
+
     /// Select an `Option<ChatSystem>`, `HashSet<Chat>`, and ordered `Vec<Event>` given a `chat_id`
     pub fn full_by_chat_id(
         chat_id: Integer,
