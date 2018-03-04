@@ -16,6 +16,7 @@ use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{AskChats, CreatedChannel, IsAdmin, Linked, PrintId, SendUrl};
 use actors::users_actor::{UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, TouchChannel, TouchUser};
+use error::EventErrorKind;
 use util::flatten;
 
 mod actor;
@@ -202,34 +203,48 @@ impl TelegramMessageActor {
                             let db = self.db.clone();
                             let db2 = self.db.clone();
                             let tg = self.tg.clone();
+                            let users = self.users.clone();
 
                             let url = self.url.clone();
 
-                            let fut = self.db
-                                .call_fut(LookupUser(user_id))
-                                .then(flatten::<LookupUser>)
-                                .and_then(move |user| {
-                                    db.call_fut(LookupSystemByChannel(channel_id))
-                                        .then(flatten::<LookupSystemByChannel>)
-                                        .map(|chat_system| (chat_system, user))
-                                })
-                                .and_then(move |(chat_system, user)| {
-                                    db2.call_fut(StoreEventLink {
-                                        user_id: user.id(),
-                                        system_id: chat_system.id(),
-                                        secret,
-                                    }).then(flatten::<StoreEventLink>)
-                                        .map(move |_| user)
-                                })
-                                .map(move |user| {
-                                    tg.send(SendUrl(
-                                        chat_id,
-                                        format!("{}/events/new/{}={}", url, base64d, user.id()),
-                                    ))
-                                });
-
-                            Arbiter::handle()
-                                .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+                            Arbiter::handle().spawn(
+                                self.db
+                                    .call_fut(LookupUser(user_id))
+                                    .then(flatten::<LookupUser>)
+                                    .and_then(move |user| {
+                                        db.call_fut(LookupSystemByChannel(channel_id))
+                                            .then(flatten::<LookupSystemByChannel>)
+                                            .map(|chat_system| (chat_system, user))
+                                    })
+                                    .and_then(move |(chat_system, user)| {
+                                        let events_channel = chat_system.events_channel();
+                                        users
+                                            .call_fut(LookupChannels(user.user_id()))
+                                            .then(flatten::<LookupChannels>)
+                                            .and_then(move |channel_ids| {
+                                                if channel_ids.contains(&events_channel) {
+                                                    Ok(())
+                                                } else {
+                                                    Err(EventErrorKind::Permissions.into())
+                                                }
+                                            })
+                                            .and_then(move |_| {
+                                                db2.call_fut(StoreEventLink {
+                                                    user_id: user.id(),
+                                                    system_id: chat_system.id(),
+                                                    secret,
+                                                }).then(flatten::<StoreEventLink>)
+                                                    .map(move |_| user)
+                                            })
+                                    })
+                                    .map(move |user| {
+                                        tg.send(SendUrl(
+                                            chat_id,
+                                            format!("{}/events/new/{}={}", url, base64d, user.id()),
+                                        ))
+                                    })
+                                    .map_err(|e| error!("Error: {:?}", e)),
+                            );
                         }
                     }
                 }

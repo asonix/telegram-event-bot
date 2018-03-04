@@ -71,6 +71,8 @@ pub enum EventErrorKind {
     TelegramLookup,
     #[fail(display = "Error on frontend")]
     Frontend,
+    #[fail(display = "User is not allowed to perform that action")]
+    Permissions,
 }
 
 /// Provide an error type for missing keys when constructing the database URL
