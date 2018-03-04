@@ -25,6 +25,7 @@ mod actors;
 mod conn;
 mod error;
 mod models;
+mod util;
 
 use actix::{Actor, Address, Arbiter, Supervisor, SyncAddress, System};
 use dotenv::dotenv;

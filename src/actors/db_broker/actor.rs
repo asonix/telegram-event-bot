@@ -1,7 +1,6 @@
 use actix::{Actor, Address, Arbiter, AsyncContext, Context, Handler, ResponseFuture, ResponseType};
 use actix::fut::wrap_future;
 use failure;
-use failure::Fail;
 use futures::Future;
 
 use actors::db_actor::DbActor;
@@ -10,6 +9,7 @@ use error::EventError;
 use error::EventErrorKind;
 use super::DbBroker;
 use super::messages::*;
+use util::flatten;
 
 impl Actor for DbBroker {
     type Context = Context<Self>;
@@ -56,13 +56,8 @@ where
         Box::new(wrap_future(
             self.db_actors
                 .clone()
-                .map_err(|e| e.into())
-                .and_then(|db_actor| {
-                    db_actor.call_fut(msg).then(|msg_res| match msg_res {
-                        Ok(res) => res,
-                        Err(err) => Err(err.context(EventErrorKind::Canceled).into()),
-                    })
-                }),
+                .map_err(T::Error::from)
+                .and_then(|db_actor| db_actor.call_fut(msg).then(flatten::<T>)),
         ))
     }
 }

@@ -18,9 +18,11 @@ impl Actor for TelegramMessageActor {
 }
 
 impl Supervised for TelegramMessageActor {
-    fn restarting(&mut self, _: &mut <Self as Actor>::Context) {
+    fn restarting(&mut self, ctx: &mut <Self as Actor>::Context) {
         debug!("Restarting telegram message actor!");
         self.bot = RcBot::new(Arbiter::handle().clone(), &self.bot.inner.key);
+
+        ctx.address::<Address<_>>().send(StartStreaming);
     }
 }
 

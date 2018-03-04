@@ -3,7 +3,6 @@ pub mod chat_system;
 pub mod event;
 pub mod new_event_link;
 pub mod user;
-mod util;
 
 #[cfg(test)]
 mod tests {
@@ -230,13 +229,13 @@ mod tests {
         connection: Connection,
         channel_id: i64,
         f: F,
-    ) -> Box<Future<Item = Connection, Error = (EventError, Connection)>>
+    ) -> impl Future<Item = Connection, Error = (EventError, Connection)>
     where
         F: FnOnce((ChatSystem, Connection)) -> G + 'static,
         G: Future<Item = (ChatSystem, Connection), Error = (EventError, ChatSystem, Connection)>
             + 'static,
     {
-        Box::new(ChatSystem::create(channel_id, connection).and_then(|tup| {
+        ChatSystem::create(channel_id, connection).and_then(|tup| {
             f(tup)
                 .or_else(|(error, chat_system, connection)| {
                     chat_system
@@ -245,7 +244,7 @@ mod tests {
                 })
                 .and_then(|(chat_system, connection)| chat_system.delete(connection))
                 .map(|(_, connection)| connection)
-        }))
+        })
     }
 
     fn with_event<F, G>(
@@ -253,7 +252,7 @@ mod tests {
         connection: Connection,
         hosts: Vec<User>,
         f: F,
-    ) -> Box<Future<Item = (ChatSystem, Connection), Error = (EventError, ChatSystem, Connection)>>
+    ) -> impl Future<Item = (ChatSystem, Connection), Error = (EventError, ChatSystem, Connection)>
     where
         F: FnOnce((Event, ChatSystem, Connection)) -> G + 'static,
         G: Future<
@@ -270,29 +269,27 @@ mod tests {
             hosts: hosts,
         };
 
-        Box::new(
-            new_event
-                .create(&chat_system, connection)
-                .then(|res| match res {
-                    Ok((event, connection)) => Ok((event, chat_system, connection)),
-                    Err((error, connection)) => Err((error, chat_system, connection)),
-                })
-                .and_then(|tup| {
-                    f(tup)
-                        .or_else(|(error, event, chat_system, connection)| {
-                            event.delete(connection).then(move |res| match res {
-                                Ok((_, connection)) => Err((error, chat_system, connection)),
-                                Err((e, connection)) => Err((e, chat_system, connection)),
-                            })
+        new_event
+            .create(&chat_system, connection)
+            .then(|res| match res {
+                Ok((event, connection)) => Ok((event, chat_system, connection)),
+                Err((error, connection)) => Err((error, chat_system, connection)),
+            })
+            .and_then(|tup| {
+                f(tup)
+                    .or_else(|(error, event, chat_system, connection)| {
+                        event.delete(connection).then(move |res| match res {
+                            Ok((_, connection)) => Err((error, chat_system, connection)),
+                            Err((e, connection)) => Err((e, chat_system, connection)),
                         })
-                        .and_then(|(event, chat_system, connection)| {
-                            event.delete(connection).then(|res| match res {
-                                Ok((_, connection)) => Ok((chat_system, connection)),
-                                Err((e, connection)) => Err((e, chat_system, connection)),
-                            })
+                    })
+                    .and_then(|(event, chat_system, connection)| {
+                        event.delete(connection).then(|res| match res {
+                            Ok((_, connection)) => Ok((chat_system, connection)),
+                            Err((e, connection)) => Err((e, chat_system, connection)),
                         })
-                }),
-        )
+                    })
+            })
     }
 
     fn with_chat<F, G>(
@@ -300,7 +297,7 @@ mod tests {
         connection: Connection,
         chat_id: i64,
         f: F,
-    ) -> Box<Future<Item = (ChatSystem, Connection), Error = (EventError, ChatSystem, Connection)>>
+    ) -> impl Future<Item = (ChatSystem, Connection), Error = (EventError, ChatSystem, Connection)>
     where
         F: FnOnce((Chat, ChatSystem, Connection)) -> G + 'static,
         G: Future<
@@ -311,29 +308,27 @@ mod tests {
     {
         let new_chat = CreateChat { chat_id };
 
-        Box::new(
-            new_chat
-                .create(&chat_system, connection)
-                .then(|res| match res {
-                    Ok((chat, connection)) => Ok((chat, chat_system, connection)),
-                    Err((error, connection)) => Err((error, chat_system, connection)),
-                })
-                .and_then(|tup| {
-                    f(tup)
-                        .or_else(|(error, chat, chat_system, connection)| {
-                            chat.delete(connection).then(move |res| match res {
-                                Ok((_, connection)) => Err((error, chat_system, connection)),
-                                Err((e, connection)) => Err((e, chat_system, connection)),
-                            })
+        new_chat
+            .create(&chat_system, connection)
+            .then(|res| match res {
+                Ok((chat, connection)) => Ok((chat, chat_system, connection)),
+                Err((error, connection)) => Err((error, chat_system, connection)),
+            })
+            .and_then(|tup| {
+                f(tup)
+                    .or_else(|(error, chat, chat_system, connection)| {
+                        chat.delete(connection).then(move |res| match res {
+                            Ok((_, connection)) => Err((error, chat_system, connection)),
+                            Err((e, connection)) => Err((e, chat_system, connection)),
                         })
-                        .and_then(|(chat, chat_system, connection)| {
-                            chat.delete(connection).then(|res| match res {
-                                Ok((_, connection)) => Ok((chat_system, connection)),
-                                Err((e, connection)) => Err((e, chat_system, connection)),
-                            })
+                    })
+                    .and_then(|(chat, chat_system, connection)| {
+                        chat.delete(connection).then(|res| match res {
+                            Ok((_, connection)) => Ok((chat_system, connection)),
+                            Err((e, connection)) => Err((e, chat_system, connection)),
                         })
-                }),
-        )
+                    })
+            })
     }
 
     fn with_user<F, G>(
@@ -341,7 +336,7 @@ mod tests {
         connection: Connection,
         user_id: i64,
         f: F,
-    ) -> Box<Future<Item = (Chat, Connection), Error = (EventError, Chat, Connection)>>
+    ) -> impl Future<Item = (Chat, Connection), Error = (EventError, Chat, Connection)>
     where
         F: FnOnce((User, Chat, Connection)) -> G + 'static,
         G: Future<Item = (User, Chat, Connection), Error = (EventError, User, Chat, Connection)>
@@ -349,29 +344,27 @@ mod tests {
     {
         let new_user = CreateUser { user_id };
 
-        Box::new(
-            new_user
-                .create(&chat, connection)
-                .then(|res| match res {
-                    Ok((user, connection)) => Ok((user, chat, connection)),
-                    Err((error, connection)) => Err((error, chat, connection)),
-                })
-                .and_then(|tup| {
-                    f(tup)
-                        .or_else(|(error, user, chat, connection)| {
-                            user.delete(connection).then(move |res| match res {
-                                Ok((_, connection)) => Err((error, chat, connection)),
-                                Err((e, connection)) => Err((e, chat, connection)),
-                            })
+        new_user
+            .create(&chat, connection)
+            .then(|res| match res {
+                Ok((user, connection)) => Ok((user, chat, connection)),
+                Err((error, connection)) => Err((error, chat, connection)),
+            })
+            .and_then(|tup| {
+                f(tup)
+                    .or_else(|(error, user, chat, connection)| {
+                        user.delete(connection).then(move |res| match res {
+                            Ok((_, connection)) => Err((error, chat, connection)),
+                            Err((e, connection)) => Err((e, chat, connection)),
                         })
-                        .and_then(|(user, chat, connection)| {
-                            user.delete(connection).then(|res| match res {
-                                Ok((_, connection)) => Ok((chat, connection)),
-                                Err((e, connection)) => Err((e, chat, connection)),
-                            })
+                    })
+                    .and_then(|(user, chat, connection)| {
+                        user.delete(connection).then(|res| match res {
+                            Ok((_, connection)) => Ok((chat, connection)),
+                            Err((e, connection)) => Err((e, chat, connection)),
                         })
-                }),
-        )
+                    })
+            })
     }
 
     fn gen_id() -> i64 {

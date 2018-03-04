@@ -2,7 +2,7 @@ use std::env;
 
 use dotenv::dotenv;
 use failure::{Context, Fail, ResultExt};
-use futures::{Future, IntoFuture};
+use futures::Future;
 use tokio_core::reactor::Handle;
 use tokio_postgres::{Connection, TlsMode};
 
@@ -37,18 +37,7 @@ pub fn prepare_database_connection() -> Result<String, EventError> {
 pub fn connect_to_database(
     db_url: String,
     handle: Handle,
-) -> Box<Future<Item = Connection, Error = EventError>> {
-    Box::new(
-        Connection::connect(db_url.as_ref(), TlsMode::None, &handle)
-            .map_err(|e| e.context(EventErrorKind::CreateConnection).into()),
-    )
-}
-
-/// Given a handle to the event loop, create a connection to the database
-pub fn database_connection(handle: Handle) -> Box<Future<Item = Connection, Error = EventError>> {
-    Box::new(
-        prepare_database_connection()
-            .into_future()
-            .and_then(move |db_url| connect_to_database(db_url, handle)),
-    )
+) -> impl Future<Item = Connection, Error = EventError> {
+    Connection::connect(db_url.as_ref(), TlsMode::None, &handle)
+        .map_err(|e| e.context(EventErrorKind::CreateConnection).into())
 }

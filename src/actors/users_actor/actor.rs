@@ -1,18 +1,18 @@
 use std::collections::HashSet;
 
 use actix::{Actor, AsyncContext, Context, Handler};
-use failure::Fail;
 use futures::{Future, Stream};
 use futures::stream::iter_ok;
 use telebot::objects::Integer;
 
-use error::{EventError, EventErrorKind};
+use error::EventError;
 use actors::db_actor::messages::{GetSystemsWithChats, GetUsersWithChats};
 use models::user::User;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;
 use super::{UserState, UsersActor};
 use super::messages::*;
+use util::flatten;
 
 impl Actor for UsersActor {
     type Context = Context<Self>;
@@ -22,10 +22,7 @@ impl Actor for UsersActor {
 
         ctx.add_stream(
             db.call_fut(GetUsersWithChats)
-                .then(|msg_res| match msg_res {
-                    Ok(res) => res,
-                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                })
+                .then(flatten::<GetUsersWithChats>)
                 .into_stream()
                 .and_then(|users_with_chats: Vec<(User, Chat)>| {
                     Ok(iter_ok(
@@ -41,10 +38,7 @@ impl Actor for UsersActor {
 
         ctx.add_stream(
             db.call_fut(GetSystemsWithChats)
-                .then(|msg_res| match msg_res {
-                    Ok(res) => res,
-                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                })
+                .then(flatten::<GetSystemsWithChats>)
                 .into_stream()
                 .and_then(|systems_with_chats: Vec<(ChatSystem, Chat)>| {
                     Ok(iter_ok(systems_with_chats.into_iter().map(|(s, c)| {

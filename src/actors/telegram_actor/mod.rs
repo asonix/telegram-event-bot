@@ -4,7 +4,6 @@ use std::fmt::Debug;
 use actix::Address;
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
 use chrono_tz::US::Central;
-use failure::Fail;
 use futures::{Future, Stream};
 use futures::stream::iter_ok;
 use telebot::RcBot;
@@ -16,6 +15,7 @@ use actors::db_actor::messages::{GetChatSystemByEventId, GetEventsForSystem, Loo
 use error::{EventError, EventErrorKind};
 use models::chat_system::ChatSystem;
 use models::event::Event;
+use util::flatten;
 
 mod actor;
 pub mod messages;
@@ -37,10 +37,7 @@ impl TelegramActor {
             .call_fut(GetChatSystemByEventId {
                 event_id: event.id(),
             })
-            .then(|msg_res| match msg_res {
-                Ok(res) => res,
-                Err(err) => Err(err.context(EventErrorKind::Canceled).into()),
-            })
+            .then(flatten::<GetChatSystemByEventId>)
             .and_then(move |chat_system| {
                 bot.message(
                     chat_system.events_channel(),
@@ -70,10 +67,7 @@ impl TelegramActor {
             .call_fut(GetChatSystemByEventId {
                 event_id: event.id(),
             })
-            .then(|msg_res| match msg_res {
-                Ok(res) => res,
-                Err(err) => Err(err.context(EventErrorKind::Canceled).into()),
-            })
+            .then(flatten::<GetChatSystemByEventId>)
             .and_then(move |chat_system| {
                 bot.message(
                     chat_system.events_channel(),
@@ -99,16 +93,10 @@ impl TelegramActor {
 
         let fut = self.db
             .call_fut(LookupSystem { system_id })
-            .then(|msg_res| match msg_res {
-                Ok(res) => res,
-                Err(err) => Err(err.context(EventErrorKind::Canceled).into()),
-            })
+            .then(flatten::<LookupSystem>)
             .and_then(move |chat_system: ChatSystem| {
                 db.call_fut(GetEventsForSystem { system_id })
-                    .then(|msg_res| match msg_res {
-                        Ok(res) => res,
-                        Err(err) => Err(err.context(EventErrorKind::Canceled).into()),
-                    })
+                    .then(flatten::<GetEventsForSystem>)
                     .and_then(move |events: Vec<Event>| {
                         let events = events
                             .into_iter()

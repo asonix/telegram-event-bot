@@ -14,7 +14,7 @@ use tokio_postgres::types::ToSql;
 use error::{EventError, EventErrorKind};
 use super::chat_system::ChatSystem;
 use super::user::User;
-use super::util::*;
+use util::*;
 
 /// Event represents a scheduled Event
 ///
@@ -160,24 +160,20 @@ impl Event {
     pub fn delete_by_id(
         id: i32,
         connection: Connection,
-    ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         let sql = "DELETE FROM events AS ev WHERE ev.id = $1";
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection.execute(&s, &[&id]).map_err(delete_error)
-                }),
-        )
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| connection.execute(&s, &[&id]).map_err(delete_error))
     }
 
     /// Delete an `Event` and all associated `hosts`
     pub fn delete(
         self,
         connection: Connection,
-    ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         Event::delete_by_id(self.id, connection)
     }
 
@@ -186,31 +182,29 @@ impl Event {
         start_date: DateTime<Utc>,
         end_date: DateTime<Utc>,
         connection: Connection,
-    ) -> Box<Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)> {
         let sql = "SELECT DISTINCT ev.id, ev.start_date, ev.end_date, ev.title, ev.description, ev.system_id
                     FROM events AS ev
                     WHERE ev.start_date > $1 AND ev.start_date < $2";
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection
-                        .query(&s, &[&start_date, &end_date])
-                        .map(|row| Event {
-                            id: row.get(0),
-                            start_date: row.get(1),
-                            end_date: row.get(2),
-                            title: row.get(3),
-                            description: row.get(4),
-                            hosts: Vec::new(),
-                            system_id: row.get(5),
-                        })
-                        .collect()
-                        .map_err(lookup_error)
-                }),
-        )
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&start_date, &end_date])
+                    .map(|row| Event {
+                        id: row.get(0),
+                        start_date: row.get(1),
+                        end_date: row.get(2),
+                        title: row.get(3),
+                        description: row.get(4),
+                        hosts: Vec::new(),
+                        system_id: row.get(5),
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+            })
     }
 
     /// Given the system id, lookup all associated events
@@ -220,36 +214,34 @@ impl Event {
     pub fn by_system_id(
         system_id: i32,
         connection: Connection,
-    ) -> Box<Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)> {
         let sql =
             "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
                 FROM events AS evt
                 LEFT JOIN hosts AS h on h.events_id = evt.id
                 WHERE evt.system_id = $1";
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection
-                        .query(&s, &[&system_id])
-                        .map(move |row| Event {
-                            id: row.get(0),
-                            start_date: row.get(1),
-                            end_date: row.get(2),
-                            title: row.get(3),
-                            description: row.get(4),
-                            hosts: User::maybe_from_parts(row.get(5), row.get(6))
-                                .into_iter()
-                                .collect(),
-                            system_id: system_id,
-                        })
-                        .collect()
-                        .map_err(lookup_error)
-                        .map(|(events, connection)| (Event::condense_events(events), connection))
-                }),
-        )
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&system_id])
+                    .map(move |row| Event {
+                        id: row.get(0),
+                        start_date: row.get(1),
+                        end_date: row.get(2),
+                        title: row.get(3),
+                        description: row.get(4),
+                        hosts: User::maybe_from_parts(row.get(5), row.get(6))
+                            .into_iter()
+                            .collect(),
+                        system_id: system_id,
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+                    .map(|(events, connection)| (Event::condense_events(events), connection))
+            })
     }
 
     /// Given a chat id, lookup all associated events
@@ -259,7 +251,7 @@ impl Event {
     pub fn by_chat_id_unordered(
         chat_id: Integer,
         connection: Connection,
-    ) -> Box<Future<Item = (HashMap<i32, Self>, Connection), Error = (EventError, Connection)>>
+    ) -> impl Future<Item = (HashMap<i32, Self>, Connection), Error = (EventError, Connection)>
     {
         let sql =
             "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id, sys.id
@@ -270,35 +262,33 @@ impl Event {
                LEFT JOIN users AS usr ON h.users_id = usr.id
                WHERE ch.id = $1";
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection
-                        .query(&s, &[&chat_id])
-                        .map(|row| {
-                            // StateStream::map()
-                            let host = User::maybe_from_parts(row.get(5), row.get(6));
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&chat_id])
+                    .map(|row| {
+                        // StateStream::map()
+                        let host = User::maybe_from_parts(row.get(5), row.get(6));
 
-                            Event {
-                                id: row.get(0),
-                                start_date: row.get(1),
-                                end_date: row.get(2),
-                                title: row.get(3),
-                                description: row.get(4),
-                                hosts: host.into_iter().collect(),
-                                system_id: row.get(7),
-                            }
-                        })
-                        .collect()
-                        .map(|(events, connection)| {
-                            // Future::map()
-                            (Event::condense_events_unordered(events), connection)
-                        })
-                        .map_err(lookup_error)
-                }),
-        )
+                        Event {
+                            id: row.get(0),
+                            start_date: row.get(1),
+                            end_date: row.get(2),
+                            title: row.get(3),
+                            description: row.get(4),
+                            hosts: host.into_iter().collect(),
+                            system_id: row.get(7),
+                        }
+                    })
+                    .collect()
+                    .map(|(events, connection)| {
+                        // Future::map()
+                        (Event::condense_events_unordered(events), connection)
+                    })
+                    .map_err(lookup_error)
+            })
     }
 
     /// Given a chat id, lookup all associated events
@@ -308,7 +298,7 @@ impl Event {
     pub fn by_chat_id(
         chat_id: Integer,
         connection: Connection,
-    ) -> Box<Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)> {
         let sql =
             "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id, sys.id
                FROM events as evt
@@ -319,35 +309,33 @@ impl Event {
                WHERE ch.chat_id = $1
                ORDER BY evt.start_date, evt.id";
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection
-                        .query(&s, &[&chat_id])
-                        .map(|row| {
-                            // StateStream::map()
-                            let host = User::maybe_from_parts(row.get(5), row.get(6));
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&chat_id])
+                    .map(|row| {
+                        // StateStream::map()
+                        let host = User::maybe_from_parts(row.get(5), row.get(6));
 
-                            Event {
-                                id: row.get(0),
-                                start_date: row.get(1),
-                                end_date: row.get(2),
-                                title: row.get(3),
-                                description: row.get(4),
-                                hosts: host.into_iter().collect(),
-                                system_id: row.get(7),
-                            }
-                        })
-                        .collect()
-                        .map(|(events, connection)| {
-                            // Future::map()
-                            (Event::condense_events(events), connection)
-                        })
-                        .map_err(lookup_error)
-                }),
-        )
+                        Event {
+                            id: row.get(0),
+                            start_date: row.get(1),
+                            end_date: row.get(2),
+                            title: row.get(3),
+                            description: row.get(4),
+                            hosts: host.into_iter().collect(),
+                            system_id: row.get(7),
+                        }
+                    })
+                    .collect()
+                    .map(|(events, connection)| {
+                        // Future::map()
+                        (Event::condense_events(events), connection)
+                    })
+                    .map_err(lookup_error)
+            })
     }
 }
 
@@ -366,7 +354,7 @@ impl CreateEvent {
         self,
         chat_system: &ChatSystem,
         connection: Connection,
-    ) -> Box<Future<Item = (Event, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Event, Connection), Error = (EventError, Connection)> {
         let sql = "INSERT INTO events (start_date, end_date, title, description, system_id) VALUES ($1, $2, $3, $4, $5) RETURNING id";
 
         let CreateEvent {
@@ -379,37 +367,35 @@ impl CreateEvent {
 
         let id = chat_system.id();
 
-        Box::new(
-            connection
-                .transaction()
-                .map_err(transaction_error)
-                .and_then(move |transaction| {
-                    insert_event(
-                        sql,
-                        id,
-                        start_date,
-                        end_date,
-                        title,
-                        description,
-                        hosts,
-                        transaction,
-                    ).or_else(|(e, transaction)| {
-                        transaction
-                            .rollback()
-                            .or_else(|(_, connection)| Err(connection))
-                            .then(move |res| match res {
-                                Ok(connection) => Err((e, connection)),
-                                Err(connection) => Err((e, connection)),
-                            })
-                    })
-                        .and_then(|(event, transaction)| {
-                            transaction
-                                .commit()
-                                .map_err(commit_error)
-                                .map(move |connection| (event, connection))
+        connection
+            .transaction()
+            .map_err(transaction_error)
+            .and_then(move |transaction| {
+                insert_event(
+                    sql,
+                    id,
+                    start_date,
+                    end_date,
+                    title,
+                    description,
+                    hosts,
+                    transaction,
+                ).or_else(|(e, transaction)| {
+                    transaction
+                        .rollback()
+                        .or_else(|(_, connection)| Err(connection))
+                        .then(move |res| match res {
+                            Ok(connection) => Err((e, connection)),
+                            Err(connection) => Err((e, connection)),
                         })
-                }),
-        )
+                })
+                    .and_then(|(event, transaction)| {
+                        transaction
+                            .commit()
+                            .map_err(commit_error)
+                            .map(move |connection| (event, connection))
+                    })
+            })
     }
 }
 
@@ -422,35 +408,33 @@ fn insert_event(
     description: String,
     hosts: Vec<User>,
     transaction: Transaction,
-) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Transaction)>> {
-    Box::new(
-        transaction
-            .prepare(sql)
-            .map_err(transaction_prepare_error)
-            .and_then(move |(s, transaction)| {
-                transaction
-                    .query(&s, &[&start_date, &end_date, &title, &description, &id])
-                    .map(move |row| Event {
-                        id: row.get(0),
-                        start_date: start_date,
-                        end_date: end_date,
-                        title: title.clone(),
-                        description: description.clone(),
-                        hosts: Vec::new(),
-                        system_id: id,
-                    })
-                    .collect()
-                    .map_err(transaction_insert_error)
-                    .and_then(|(mut events, transaction)| {
-                        if events.len() > 0 {
-                            Ok((events.remove(0), transaction))
-                        } else {
-                            Err((EventErrorKind::Insert.into(), transaction))
-                        }
-                    })
-                    .and_then(move |(event, transaction)| insert_hosts(hosts, event, transaction))
-            }),
-    )
+) -> impl Future<Item = (Event, Transaction), Error = (EventError, Transaction)> {
+    transaction
+        .prepare(sql)
+        .map_err(transaction_prepare_error)
+        .and_then(move |(s, transaction)| {
+            transaction
+                .query(&s, &[&start_date, &end_date, &title, &description, &id])
+                .map(move |row| Event {
+                    id: row.get(0),
+                    start_date: start_date,
+                    end_date: end_date,
+                    title: title.clone(),
+                    description: description.clone(),
+                    hosts: Vec::new(),
+                    system_id: id,
+                })
+                .collect()
+                .map_err(transaction_insert_error)
+                .and_then(|(mut events, transaction)| {
+                    if events.len() > 0 {
+                        Ok((events.remove(0), transaction))
+                    } else {
+                        Err((EventErrorKind::Insert.into(), transaction))
+                    }
+                })
+                .and_then(move |(event, transaction)| insert_hosts(hosts, event, transaction))
+        })
 }
 
 fn prepare_hosts(
@@ -485,23 +469,21 @@ fn insert_hosts(
     hosts: Vec<User>,
     event: Event,
     transaction: Transaction,
-) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Transaction)>> {
-    Box::new(
-        prepare_hosts(&hosts, event, transaction)
-            .into_future()
-            .and_then(move |(hosts_sql, event, transaction)| {
-                insert_hosts_prepare(hosts, hosts_sql, event, transaction)
-            })
-            .or_else(
-                move |(e, event, transaction): (EventError, _, Transaction)| {
-                    if *e.context.get_context() == EventErrorKind::Hosts {
-                        Ok((event, transaction))
-                    } else {
-                        Err((e, transaction))
-                    }
-                },
-            ),
-    )
+) -> impl Future<Item = (Event, Transaction), Error = (EventError, Transaction)> {
+    prepare_hosts(&hosts, event, transaction)
+        .into_future()
+        .and_then(move |(hosts_sql, event, transaction)| {
+            insert_hosts_prepare(hosts, hosts_sql, event, transaction)
+        })
+        .or_else(
+            move |(e, event, transaction): (EventError, _, Transaction)| {
+                if *e.context.get_context() == EventErrorKind::Hosts {
+                    Ok((event, transaction))
+                } else {
+                    Err((e, transaction))
+                }
+            },
+        )
 }
 
 fn insert_hosts_prepare(
@@ -509,23 +491,21 @@ fn insert_hosts_prepare(
     hosts_sql: String,
     event: Event,
     transaction: Transaction,
-) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Event, Transaction)>> {
-    Box::new(
-        transaction
-            .prepare(&hosts_sql)
-            .then(move |res| match res {
-                Ok((s, transaction)) => Ok((s, event, transaction)),
-                Err((e, transaction)) => Err((e, event, transaction)),
-            })
-            .or_else(|(e, event, transaction)| {
-                Err(e)
-                    .context(EventErrorKind::Prepare)
-                    .map_err(|e| (e.into(), event, transaction))
-            })
-            .and_then(move |(statement, event, transaction)| {
-                insert_hosts_query(hosts, statement, event, transaction)
-            }),
-    )
+) -> impl Future<Item = (Event, Transaction), Error = (EventError, Event, Transaction)> {
+    transaction
+        .prepare(&hosts_sql)
+        .then(move |res| match res {
+            Ok((s, transaction)) => Ok((s, event, transaction)),
+            Err((e, transaction)) => Err((e, event, transaction)),
+        })
+        .or_else(|(e, event, transaction)| {
+            Err(e)
+                .context(EventErrorKind::Prepare)
+                .map_err(|e| (e.into(), event, transaction))
+        })
+        .and_then(move |(statement, event, transaction)| {
+            insert_hosts_query(hosts, statement, event, transaction)
+        })
 }
 
 fn insert_hosts_query(
@@ -533,7 +513,7 @@ fn insert_hosts_query(
     statement: Statement,
     mut event: Event,
     transaction: Transaction,
-) -> Box<Future<Item = (Event, Transaction), Error = (EventError, Event, Transaction)>> {
+) -> impl Future<Item = (Event, Transaction), Error = (EventError, Event, Transaction)> {
     let id = event.id();
 
     let host_ids: Vec<_> = hosts.iter().map(|user| user.id()).collect();
@@ -546,26 +526,24 @@ fn insert_hosts_query(
 
     let num_hosts = hosts.len();
 
-    Box::new(
-        transaction
-            .query(&statement, host_args.as_slice())
-            .map(move |row| row.get(0))
-            .collect()
-            .map_err(transaction_insert_error)
-            .and_then(move |(users_ids, transaction): (Vec<i32>, _)| {
-                if users_ids.len() == num_hosts {
-                    Ok((hosts, transaction))
-                } else {
-                    Err((EventErrorKind::Insert.into(), transaction))
-                }
-            })
-            .then(|res| match res {
-                Ok((hosts, transaction)) => {
-                    event.hosts.extend(hosts);
+    transaction
+        .query(&statement, host_args.as_slice())
+        .map(move |row| row.get(0))
+        .collect()
+        .map_err(transaction_insert_error)
+        .and_then(move |(users_ids, transaction): (Vec<i32>, _)| {
+            if users_ids.len() == num_hosts {
+                Ok((hosts, transaction))
+            } else {
+                Err((EventErrorKind::Insert.into(), transaction))
+            }
+        })
+        .then(|res| match res {
+            Ok((hosts, transaction)) => {
+                event.hosts.extend(hosts);
 
-                    Ok((event, transaction))
-                }
-                Err((e, transaction)) => Err((e, event, transaction)),
-            }),
-    )
+                Ok((event, transaction))
+            }
+            Err((e, transaction)) => Err((e, event, transaction)),
+        })
 }

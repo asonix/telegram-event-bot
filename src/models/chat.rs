@@ -8,7 +8,7 @@ use tokio_postgres::Connection;
 use error::{EventError, EventErrorKind};
 use super::chat_system::ChatSystem;
 use super::event::Event;
-use super::util::*;
+use util::*;
 
 /// Chat represents a single telegram chat
 ///
@@ -43,48 +43,44 @@ impl Chat {
     pub fn by_chat_id(
         chat_id: Integer,
         connection: Connection,
-    ) -> Box<Future<Item = (Chat, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Chat, Connection), Error = (EventError, Connection)> {
         let sql = "SELECT id FROM chats AS ch WHERE ch.chat_id = $1";
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection
-                        .query(&s, &[&chat_id])
-                        .map(move |row| Chat {
-                            id: row.get(0),
-                            chat_id: chat_id,
-                        })
-                        .collect()
-                        .map_err(lookup_error)
-                })
-                .and_then(|(mut chats, connection)| {
-                    if chats.len() > 0 {
-                        Ok((chats.remove(0), connection))
-                    } else {
-                        Err((EventErrorKind::Lookup.into(), connection))
-                    }
-                }),
-        )
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&chat_id])
+                    .map(move |row| Chat {
+                        id: row.get(0),
+                        chat_id: chat_id,
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+            })
+            .and_then(|(mut chats, connection)| {
+                if chats.len() > 0 {
+                    Ok((chats.remove(0), connection))
+                } else {
+                    Err((EventErrorKind::Lookup.into(), connection))
+                }
+            })
     }
 
     pub fn get_events(
         &self,
         connection: Connection,
-    ) -> Box<Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)> {
         Event::by_chat_id(self.chat_id, connection)
     }
 
     pub fn get_system_with_events(
         &self,
         connection: Connection,
-    ) -> Box<
-        Future<
-            Item = ((Option<ChatSystem>, HashSet<Chat>, Vec<Event>), Connection),
-            Error = (EventError, Connection),
-        >,
+    ) -> impl Future<
+        Item = ((Option<ChatSystem>, HashSet<Chat>, Vec<Event>), Connection),
+        Error = (EventError, Connection),
     > {
         ChatSystem::full_by_chat_id(self.chat_id, connection)
     }
@@ -92,23 +88,19 @@ impl Chat {
     pub fn delete_by_id(
         id: i32,
         connection: Connection,
-    ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         let sql = "DELETE FROM chats AS ch WHERE ch.id = $1";
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection.execute(&s, &[&id]).map_err(delete_error)
-                }),
-        )
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| connection.execute(&s, &[&id]).map_err(delete_error))
     }
 
     pub fn delete(
         self,
         connection: Connection,
-    ) -> Box<Future<Item = (u64, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         Chat::delete_by_id(self.id, connection)
     }
 }
@@ -122,33 +114,31 @@ impl CreateChat {
         self,
         chat_system: &ChatSystem,
         connection: Connection,
-    ) -> Box<Future<Item = (Chat, Connection), Error = (EventError, Connection)>> {
+    ) -> impl Future<Item = (Chat, Connection), Error = (EventError, Connection)> {
         let sql = "INSERT INTO chats (chat_id, system_id) VALUES ($1, $2) RETURNING id";
 
         let chat_id = self.chat_id;
         let system_id = chat_system.id();
 
-        Box::new(
-            connection
-                .prepare(sql)
-                .map_err(prepare_error)
-                .and_then(move |(s, connection)| {
-                    connection
-                        .query(&s, &[&chat_id, &system_id])
-                        .map(move |row| Chat {
-                            id: row.get(0),
-                            chat_id: chat_id,
-                        })
-                        .collect()
-                        .map_err(insert_error)
-                        .and_then(|(mut chats, connection)| {
-                            if chats.len() > 0 {
-                                Ok((chats.remove(0), connection))
-                            } else {
-                                Err((EventErrorKind::Insert.into(), connection))
-                            }
-                        })
-                }),
-        )
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&chat_id, &system_id])
+                    .map(move |row| Chat {
+                        id: row.get(0),
+                        chat_id: chat_id,
+                    })
+                    .collect()
+                    .map_err(insert_error)
+                    .and_then(|(mut chats, connection)| {
+                        if chats.len() > 0 {
+                            Ok((chats.remove(0), connection))
+                        } else {
+                            Err((EventErrorKind::Insert.into(), connection))
+                        }
+                    })
+            })
     }
 }

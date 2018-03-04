@@ -4,7 +4,6 @@ use std::time::Duration;
 use actix::{Address, Arbiter};
 use chrono::Duration as OldDuration;
 use chrono::offset::Utc;
-use failure::Fail;
 use futures::Future;
 use tokio_timer::Timer as TokioTimer;
 
@@ -12,8 +11,9 @@ use actors::db_actor::DbActor;
 use actors::db_actor::messages::{DeleteEvent, GetEventsInRange};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{EventOver, NotifyEvent};
-use error::{EventError, EventErrorKind};
+use error::EventError;
 use models::event::Event;
+use util::flatten;
 
 mod actor;
 pub mod messages;
@@ -26,20 +26,15 @@ pub struct Timer {
 }
 
 impl Timer {
-    fn get_next_hour(&self) -> Box<Future<Item = Vec<Event>, Error = EventError>> {
+    fn get_next_hour(&self) -> impl Future<Item = Vec<Event>, Error = EventError> {
         let now = Utc::now();
 
-        Box::new(
-            self.db
-                .call_fut(GetEventsInRange {
-                    start_date: now,
-                    end_date: now + OldDuration::hours(1),
-                })
-                .then(|result| match result {
-                    Ok(res) => res,
-                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                }),
-        )
+        self.db
+            .call_fut(GetEventsInRange {
+                start_date: now,
+                end_date: now + OldDuration::hours(1),
+            })
+            .then(flatten::<GetEventsInRange>)
     }
 
     fn set_deleters(&mut self, events: &[Event]) {

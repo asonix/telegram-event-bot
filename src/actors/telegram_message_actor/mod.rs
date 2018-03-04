@@ -1,5 +1,4 @@
 use actix::{Address, Arbiter};
-use failure::Fail;
 use futures::Future;
 use telebot::objects::{CallbackQuery, Integer, Message, Update};
 use telebot::RcBot;
@@ -17,7 +16,7 @@ use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{AskChats, CreatedChannel, IsAdmin, Linked, PrintId, SendUrl};
 use actors::users_actor::{UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, TouchChannel, TouchUser};
-use error::EventErrorKind;
+use util::flatten;
 
 mod actor;
 mod messages;
@@ -78,10 +77,7 @@ impl TelegramMessageActor {
                         Arbiter::handle().spawn(
                             self.users
                                 .call_fut(LookupChannels(user.id))
-                                .then(|msg_res| match msg_res {
-                                    Ok(res) => res,
-                                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                                })
+                                .then(flatten::<LookupChannels>)
                                 .map(move |chats| tg.send(AskChats(chats, chat_id)))
                                 .map_err(|e| error!("Error: {:?}", e)),
                         );
@@ -106,10 +102,7 @@ impl TelegramMessageActor {
                         Arbiter::handle().spawn(
                             self.users
                                 .call_fut(TouchUser(user_id, chat_id))
-                                .then(|msg_res| match msg_res {
-                                    Ok(res) => res,
-                                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                                })
+                                .then(flatten::<TouchUser>)
                                 .and_then(move |user_state| {
                                     Ok(match user_state {
                                         UserState::NewRelation => {
@@ -155,10 +148,7 @@ impl TelegramMessageActor {
                     Arbiter::handle().spawn(
                         self.tg
                             .call_fut(IsAdmin(channel_id, chat_ids))
-                            .then(|msg_res| match msg_res {
-                                Ok(res) => res,
-                                Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                            })
+                            .then(flatten::<IsAdmin>)
                             .and_then(move |chat_ids| {
                                 for chat_id in chat_ids.iter() {
                                     db.send(NewChat {
@@ -183,10 +173,7 @@ impl TelegramMessageActor {
                     Arbiter::handle().spawn(
                         self.db
                             .call_fut(NewChannel { channel_id })
-                            .then(|msg_res| match msg_res {
-                                Ok(res) => res,
-                                Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                            })
+                            .then(flatten::<NewChannel>)
                             .map(move |_chat_system| tg.send(CreatedChannel(channel_id)))
                             .map_err(|e| error!("Error: {:?}", e)),
                     );
@@ -220,18 +207,10 @@ impl TelegramMessageActor {
 
                             let fut = self.db
                                 .call_fut(LookupUser(user_id))
-                                .then(|msg_res| match msg_res {
-                                    Ok(res) => res,
-                                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                                })
+                                .then(flatten::<LookupUser>)
                                 .and_then(move |user| {
                                     db.call_fut(LookupSystemByChannel(channel_id))
-                                        .then(|msg_res| match msg_res {
-                                            Ok(res) => res,
-                                            Err(e) => {
-                                                Err(e.context(EventErrorKind::Canceled).into())
-                                            }
-                                        })
+                                        .then(flatten::<LookupSystemByChannel>)
                                         .map(|chat_system| (chat_system, user))
                                 })
                                 .and_then(move |(chat_system, user)| {
@@ -239,12 +218,7 @@ impl TelegramMessageActor {
                                         user_id: user.id(),
                                         system_id: chat_system.id(),
                                         secret,
-                                    }).then(|msg_res| match msg_res {
-                                            Ok(res) => res,
-                                            Err(e) => {
-                                                Err(e.context(EventErrorKind::Canceled).into())
-                                            }
-                                        })
+                                    }).then(flatten::<StoreEventLink>)
                                         .map(move |_| user)
                                 })
                                 .map(move |user| {

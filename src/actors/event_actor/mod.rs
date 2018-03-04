@@ -10,6 +10,7 @@ use actors::db_actor::messages::{DeleteEventLink, EventLinkByUserId, NewEvent};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::NewEvent as TgNewEvent;
 use error::{EventError, EventErrorKind};
+use util::flatten;
 
 #[derive(Clone)]
 pub struct EventActor {
@@ -38,10 +39,7 @@ impl EventActor {
                 Arbiter::handle().spawn(
                     self.db
                         .call_fut(EventLinkByUserId { user_id })
-                        .then(|msg_res| match msg_res {
-                            Ok(res) => res,
-                            Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                        })
+                        .then(flatten::<EventLinkByUserId>)
                         .and_then(move |nel| match verify_secret(&base64d, nel.secret()) {
                             Ok(b) => if b {
                                 Ok(nel)
@@ -53,10 +51,7 @@ impl EventActor {
                         .and_then(move |nel| {
                             database
                                 .call_fut(DeleteEventLink { id: nel.id() })
-                                .then(|msg_res| match msg_res {
-                                    Ok(res) => res,
-                                    Err(e) => Err(e.context(EventErrorKind::Canceled).into()),
-                                })
+                                .then(flatten::<DeleteEventLink>)
                                 .join(
                                     database
                                         .call_fut(NewEvent {
@@ -67,12 +62,7 @@ impl EventActor {
                                             end_date: event.end_date().with_timezone(&Utc),
                                             hosts: vec![nel.user_id()],
                                         })
-                                        .then(|msg_res| match msg_res {
-                                            Ok(res) => res,
-                                            Err(e) => {
-                                                Err(e.context(EventErrorKind::Canceled).into())
-                                            }
-                                        })
+                                        .then(flatten::<NewEvent>)
                                         .map(move |event| tg.send(TgNewEvent(event))),
                                 )
                         })

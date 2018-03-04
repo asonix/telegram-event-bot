@@ -3,7 +3,7 @@ use futures_state_stream::StateStream;
 use tokio_postgres::Connection;
 
 use error::{EventError, EventErrorKind};
-use super::util::*;
+use util::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewEventLink {
