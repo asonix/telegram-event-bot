@@ -10,7 +10,7 @@ use actors::db_actor::messages::{GetSystemsWithChats, GetUsersWithChats};
 use models::user::User;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;
-use super::{UserState, UsersActor};
+use super::{DeleteState, UserState, UsersActor};
 use super::messages::*;
 use util::flatten;
 
@@ -105,5 +105,13 @@ impl Handler<LookupChannels> for UsersActor {
 
     fn handle(&mut self, msg: LookupChannels, _: &mut Self::Context) -> Self::Result {
         Ok(self.lookup_channels(msg.0))
+    }
+}
+
+impl Handler<RemoveRelation> for UsersActor {
+    type Result = Result<DeleteState, EventError>;
+
+    fn handle(&mut self, msg: RemoveRelation, _: &mut Self::Context) -> Self::Result {
+        Ok(self.remove_relation(msg.0, msg.1))
     }
 }

@@ -9,13 +9,13 @@ use rand::os::OsRng;
 
 use ENCODING_ALPHABET;
 use actors::db_actor::messages::StoreEventLink;
-use actors::db_actor::messages::{LookupSystemByChannel, LookupUser, NewChannel, NewChat,
-                                 NewRelation, NewUser};
+use actors::db_actor::messages::{DeleteUserByUserId, LookupSystemByChannel, LookupUser,
+                                 NewChannel, NewChat, NewRelation, NewUser, RemoveUserChat};
 use actors::db_broker::DbBroker;
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{AskChats, CreatedChannel, IsAdmin, Linked, PrintId, SendUrl};
-use actors::users_actor::{UserState, UsersActor};
-use actors::users_actor::messages::{LookupChannels, TouchChannel, TouchUser};
+use actors::users_actor::{DeleteState, UserState, UsersActor};
+use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
 use error::EventErrorKind;
 use util::flatten;
 
@@ -64,7 +64,64 @@ impl TelegramMessageActor {
 
     fn handle_message(&self, message: Message) {
         debug!("handle message");
-        if let Some(user) = message.from {
+        if let Some(user) = message.left_chat_member {
+            debug!("left chat member");
+            if message.chat.kind == "group" || message.chat.kind == "supergroup" {
+                debug!("group | supergroup");
+                let chat_id = message.chat.id;
+                let user_id = user.id;
+
+                let db = self.db.clone();
+
+                Arbiter::handle().spawn(
+                    self.users
+                        .call_fut(RemoveRelation(user_id, chat_id))
+                        .then(flatten::<RemoveRelation>)
+                        .and_then(move |delete_state| {
+                            match delete_state {
+                                DeleteState::UserEmpty => Arbiter::handle().spawn(
+                                    db.call_fut(DeleteUserByUserId(user_id))
+                                        .then(flatten::<DeleteUserByUserId>)
+                                        .map_err(|e| error!("Error: {:?}", e)),
+                                ),
+                                _ => (),
+                            }
+
+                            db.call_fut(RemoveUserChat(user_id, chat_id))
+                                .then(flatten::<RemoveUserChat>)
+                        })
+                        .map_err(|e| error!("Error: {:?}", e))
+                        .map(|_| ()),
+                );
+            }
+        } else if let Some(user) = message.new_chat_member {
+            debug!("new chat member");
+            if message.chat.kind == "group" || message.chat.kind == "supergroup" {
+                debug!("group | supergroup");
+                let db = self.db.clone();
+
+                let user_id = user.id;
+                let chat_id = message.chat.id;
+
+                Arbiter::handle().spawn(
+                    self.users
+                        .call_fut(TouchUser(user_id, chat_id))
+                        .then(flatten::<TouchUser>)
+                        .and_then(move |user_state| {
+                            Ok(match user_state {
+                                UserState::NewRelation => {
+                                    db.send(NewRelation { chat_id, user_id });
+                                }
+                                UserState::NewUser => {
+                                    db.send(NewUser { chat_id, user_id });
+                                }
+                                _ => (),
+                            })
+                        })
+                        .map_err(|e| error!("Error: {:?}", e)),
+                );
+            }
+        } else if let Some(user) = message.from {
             debug!("user");
             if let Some(text) = message.text {
                 debug!("text");

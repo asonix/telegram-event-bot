@@ -14,6 +14,11 @@ pub enum UserState {
     KnownRelation,
 }
 
+pub enum DeleteState {
+    UserValid,
+    UserEmpty,
+}
+
 pub struct UsersActor {
     // maps user_id to HashSet<ChatId>
     users: HashMap<Integer, HashSet<Integer>>,
@@ -77,5 +82,22 @@ impl UsersActor {
                     .map(|(k, _)| *k)
             })
             .collect()
+    }
+
+    fn remove_relation(&mut self, user_id: Integer, chat_id: Integer) -> DeleteState {
+        debug!("Removing chat {} from user {}", chat_id, user_id);
+        let mut hs = match self.users.remove(&user_id) {
+            Some(hs) => hs,
+            None => return DeleteState::UserEmpty,
+        };
+
+        hs.remove(&chat_id);
+
+        if !hs.is_empty() {
+            self.users.insert(user_id, hs);
+            DeleteState::UserValid
+        } else {
+            DeleteState::UserEmpty
+        }
     }
 }

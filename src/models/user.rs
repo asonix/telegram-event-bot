@@ -140,6 +140,27 @@ impl User {
             })
     }
 
+    pub fn delete_by_user_id(
+        user_id: Integer,
+        connection: Connection,
+    ) -> impl Future<Item = ((), Connection), Error = (EventError, Connection)> {
+        let sql = "DELETE FROM users AS usr WHERE usr.user_id = $1";
+
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection.execute(&s, &[&user_id]).map_err(delete_error)
+            })
+            .and_then(|(count, connection)| {
+                if count > 0 {
+                    Ok(((), connection))
+                } else {
+                    Err((EventErrorKind::Delete.into(), connection))
+                }
+            })
+    }
+
     pub fn delete_by_id(
         id: i32,
         connection: Connection,
@@ -157,6 +178,40 @@ impl User {
         connection: Connection,
     ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         User::delete_by_id(self.id, connection)
+    }
+
+    pub fn delete_relation_by_ids(
+        user_id: Integer,
+        chat_id: Integer,
+        connection: Connection,
+    ) -> impl Future<Item = ((), Connection), Error = (EventError, Connection)> {
+        let sql = "DELETE FROM user_chats AS uc
+                    USING users AS usr, chats AS ch
+                    WHERE uc.users_id = usr.id AND uc.chats_id = ch.id AND usr.user_id = $1 AND ch.chat_id = $2";
+
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .execute(&s, &[&user_id, &chat_id])
+                    .map_err(delete_error)
+                    .and_then(|(count, connection)| {
+                        if count > 0 {
+                            Ok(((), connection))
+                        } else {
+                            Err((EventErrorKind::Delete.into(), connection))
+                        }
+                    })
+            })
+    }
+
+    pub fn delete_relation(
+        &self,
+        chat: &Chat,
+        connection: Connection,
+    ) -> impl Future<Item = ((), Connection), Error = (EventError, Connection)> {
+        User::delete_relation_by_ids(self.user_id, chat.chat_id(), connection)
     }
 }
 

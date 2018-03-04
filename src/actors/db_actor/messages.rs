@@ -192,3 +192,19 @@ impl ResponseType for GetSystemsWithChats {
     type Item = Vec<(ChatSystem, Chat)>;
     type Error = EventError;
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct RemoveUserChat(pub Integer, pub Integer);
+
+impl ResponseType for RemoveUserChat {
+    type Item = ();
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DeleteUserByUserId(pub Integer);
+
+impl ResponseType for DeleteUserByUserId {
+    type Item = ();
+    type Error = EventError;
+}

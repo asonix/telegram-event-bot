@@ -162,6 +162,22 @@ impl Handler<GetSystemsWithChats> for DbActor {
     }
 }
 
+impl Handler<RemoveUserChat> for DbActor {
+    type Result = ResponseFuture<Self, RemoveUserChat>;
+
+    fn handle(&mut self, msg: RemoveUserChat, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.remove_user_chat(msg.0, msg.1))
+    }
+}
+
+impl Handler<DeleteUserByUserId> for DbActor {
+    type Result = ResponseFuture<Self, DeleteUserByUserId>;
+
+    fn handle(&mut self, msg: DeleteUserByUserId, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.delete_user_by_user_id(msg.0))
+    }
+}
+
 impl DbActor {
     fn wrap_fut<I, F>(fut: F) -> Box<ActorFuture<Item = I, Error = EventError, Actor = Self>>
     where

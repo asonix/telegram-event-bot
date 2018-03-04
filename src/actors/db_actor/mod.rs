@@ -315,4 +315,33 @@ impl DbActor {
             .map_err(Err)
             .and_then(move |connection| ChatSystem::all_with_chats(connection).map_err(Ok))
     }
+
+    fn remove_user_chat(
+        &mut self,
+        user_id: Integer,
+        chat_id: Integer,
+    ) -> impl Future<Item = ((), Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        debug!(
+            "Deleting relation between chat {} and user {}",
+            chat_id, user_id
+        );
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| {
+                User::delete_relation_by_ids(user_id, chat_id, connection).map_err(Ok)
+            })
+    }
+
+    fn delete_user_by_user_id(
+        &mut self,
+        user_id: Integer,
+    ) -> impl Future<Item = ((), Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| User::delete_by_user_id(user_id, connection).map_err(Ok))
+    }
 }
