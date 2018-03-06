@@ -39,7 +39,7 @@ impl Handler<NewUser> for DbActor {
     type Result = ResponseFuture<Self, NewUser>;
 
     fn handle(&mut self, msg: NewUser, _: &mut Self::Context) -> Self::Result {
-        DbActor::wrap_fut(self.new_user(msg.chat_id, msg.user_id))
+        DbActor::wrap_fut(self.new_user(msg.chat_id, msg.user_id, msg.username))
     }
 }
 

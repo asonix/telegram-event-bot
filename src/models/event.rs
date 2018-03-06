@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use chrono::DateTime;
 use chrono::offset::Utc;
+use chrono_tz::Tz;
 use failure::ResultExt;
 use futures::{Future, IntoFuture};
 use futures_state_stream::StateStream;
@@ -38,12 +40,18 @@ use util::*;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Event {
     id: i32,
-    start_date: DateTime<Utc>,
-    end_date: DateTime<Utc>,
+    start_date: DateTime<Tz>,
+    end_date: DateTime<Tz>,
     title: String,
     description: String,
     hosts: Vec<User>,
     system_id: i32,
+}
+
+impl Hash for Event {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
 }
 
 impl Event {
@@ -54,27 +62,18 @@ impl Event {
         title: Option<String>,
         description: Option<String>,
         system_id: Option<i32>,
+        timezone: Option<String>,
     ) -> Option<Self> {
-        let hosts = Vec::new();
+        let timezone = timezone?.parse::<Tz>().ok()?;
 
-        id.and_then(|id| {
-            start_date.and_then(|start_date| {
-                end_date.and_then(|end_date| {
-                    title.and_then(|title| {
-                        description.and_then(|description| {
-                            system_id.map(|system_id| Event {
-                                id,
-                                start_date,
-                                end_date,
-                                title,
-                                description,
-                                hosts,
-                                system_id,
-                            })
-                        })
-                    })
-                })
-            })
+        Some(Event {
+            id: id?,
+            start_date: start_date?.with_timezone(&timezone),
+            end_date: end_date?.with_timezone(&timezone),
+            title: title?,
+            description: description?,
+            hosts: Vec::new(),
+            system_id: system_id?,
         })
     }
 
@@ -86,11 +85,11 @@ impl Event {
         self.id
     }
 
-    pub fn start_date(&self) -> &DateTime<Utc> {
+    pub fn start_date(&self) -> &DateTime<Tz> {
         &self.start_date
     }
 
-    pub fn end_date(&self) -> &DateTime<Utc> {
+    pub fn end_date(&self) -> &DateTime<Tz> {
         &self.end_date
     }
 
@@ -179,30 +178,46 @@ impl Event {
 
     /// Get a `Vec<Event>` with events happening within the next `start_date` to `end_date`
     pub fn in_range(
-        start_date: DateTime<Utc>,
-        end_date: DateTime<Utc>,
+        start_date: DateTime<Tz>,
+        end_date: DateTime<Tz>,
         connection: Connection,
     ) -> impl Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)> {
-        let sql = "SELECT DISTINCT ev.id, ev.start_date, ev.end_date, ev.title, ev.description, ev.system_id
+        let sql = "SELECT DISTINCT ev.id, ev.start_date, ev.end_date, ev.title, ev.description, ev.system_id, ev.timezone
                     FROM events AS ev
                     WHERE ev.start_date > $1 AND ev.start_date < $2";
+
+        let sd = start_date.with_timezone(&Utc);
+        let ed = end_date.with_timezone(&Utc);
 
         connection
             .prepare(sql)
             .map_err(prepare_error)
             .and_then(move |(s, connection)| {
                 connection
-                    .query(&s, &[&start_date, &end_date])
-                    .map(|row| Event {
-                        id: row.get(0),
-                        start_date: row.get(1),
-                        end_date: row.get(2),
-                        title: row.get(3),
-                        description: row.get(4),
-                        hosts: Vec::new(),
-                        system_id: row.get(5),
+                    .query(&s, &[&sd, &ed])
+                    .map(|row| {
+                        let sd: DateTime<Utc> = row.get(1);
+                        let ed: DateTime<Utc> = row.get(2);
+
+                        let tz: String = row.get(6);
+
+                        tz.parse::<Tz>().map(|timezone| Event {
+                            id: row.get(0),
+                            start_date: sd.with_timezone(&timezone),
+                            end_date: ed.with_timezone(&timezone),
+                            title: row.get(3),
+                            description: row.get(4),
+                            hosts: Vec::new(),
+                            system_id: row.get(5),
+                        })
                     })
                     .collect()
+                    .map(|(events, connection)| {
+                        (
+                            events.into_iter().filter_map(Result::ok).collect(),
+                            connection,
+                        )
+                    })
                     .map_err(lookup_error)
             })
     }
@@ -216,9 +231,10 @@ impl Event {
         connection: Connection,
     ) -> impl Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)> {
         let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, evt.timezone, usr.id, usr.user_id, usr.username
                 FROM events AS evt
-                LEFT JOIN hosts AS h on h.events_id = evt.id
+                LEFT JOIN hosts AS h ON h.events_id = evt.id
+                INNER JOIN users AS usr ON usr.id = h.users_id
                 WHERE evt.system_id = $1";
 
         connection
@@ -227,20 +243,34 @@ impl Event {
             .and_then(move |(s, connection)| {
                 connection
                     .query(&s, &[&system_id])
-                    .map(move |row| Event {
-                        id: row.get(0),
-                        start_date: row.get(1),
-                        end_date: row.get(2),
-                        title: row.get(3),
-                        description: row.get(4),
-                        hosts: User::maybe_from_parts(row.get(5), row.get(6))
-                            .into_iter()
-                            .collect(),
-                        system_id: system_id,
+                    .map(move |row| {
+                        let tz: String = row.get(5);
+
+                        let sd: DateTime<Utc> = row.get(1);
+                        let ed: DateTime<Utc> = row.get(2);
+
+                        tz.parse::<Tz>().map(|timezone| Event {
+                            id: row.get(0),
+                            start_date: sd.with_timezone(&timezone),
+                            end_date: ed.with_timezone(&timezone),
+                            title: row.get(3),
+                            description: row.get(4),
+                            hosts: User::maybe_from_parts(row.get(6), row.get(7), row.get(8))
+                                .into_iter()
+                                .collect(),
+                            system_id: system_id,
+                        })
                     })
                     .collect()
                     .map_err(lookup_error)
-                    .map(|(events, connection)| (Event::condense_events(events), connection))
+                    .map(|(events, connection)| {
+                        (
+                            Event::condense_events(
+                                events.into_iter().filter_map(Result::ok).collect(),
+                            ),
+                            connection,
+                        )
+                    })
             })
     }
 
@@ -254,7 +284,7 @@ impl Event {
     ) -> impl Future<Item = (HashMap<i32, Self>, Connection), Error = (EventError, Connection)>
     {
         let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id, sys.id
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, evt.timezone, usr.id, usr.user_id, usr.username, sys.id
                FROM events AS evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
@@ -269,23 +299,30 @@ impl Event {
                 connection
                     .query(&s, &[&chat_id])
                     .map(|row| {
-                        // StateStream::map()
-                        let host = User::maybe_from_parts(row.get(5), row.get(6));
+                        let host = User::maybe_from_parts(row.get(6), row.get(7), row.get(8));
+                        let tz: String = row.get(5);
 
-                        Event {
+                        let sd: DateTime<Utc> = row.get(1);
+                        let ed: DateTime<Utc> = row.get(2);
+
+                        tz.parse::<Tz>().map(|timezone| Event {
                             id: row.get(0),
-                            start_date: row.get(1),
-                            end_date: row.get(2),
+                            start_date: sd.with_timezone(&timezone),
+                            end_date: ed.with_timezone(&timezone),
                             title: row.get(3),
                             description: row.get(4),
                             hosts: host.into_iter().collect(),
-                            system_id: row.get(7),
-                        }
+                            system_id: row.get(8),
+                        })
                     })
                     .collect()
                     .map(|(events, connection)| {
-                        // Future::map()
-                        (Event::condense_events_unordered(events), connection)
+                        (
+                            Event::condense_events_unordered(
+                                events.into_iter().filter_map(Result::ok).collect(),
+                            ),
+                            connection,
+                        )
                     })
                     .map_err(lookup_error)
             })
@@ -300,7 +337,7 @@ impl Event {
         connection: Connection,
     ) -> impl Future<Item = (Vec<Self>, Connection), Error = (EventError, Connection)> {
         let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, usr.id, usr.user_id, sys.id
+            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, evt.timezone, usr.id, usr.user_id, usr.username, sys.id
                FROM events as evt
                INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
                INNER JOIN chats AS ch ON ch.system_id = sys.id
@@ -317,22 +354,31 @@ impl Event {
                     .query(&s, &[&chat_id])
                     .map(|row| {
                         // StateStream::map()
-                        let host = User::maybe_from_parts(row.get(5), row.get(6));
+                        let host = User::maybe_from_parts(row.get(6), row.get(7), row.get(8));
+                        let tz: String = row.get(5);
 
-                        Event {
+                        let sd: DateTime<Utc> = row.get(1);
+                        let ed: DateTime<Utc> = row.get(2);
+
+                        tz.parse::<Tz>().map(|timezone| Event {
                             id: row.get(0),
-                            start_date: row.get(1),
-                            end_date: row.get(2),
+                            start_date: sd.with_timezone(&timezone),
+                            end_date: ed.with_timezone(&timezone),
                             title: row.get(3),
                             description: row.get(4),
                             hosts: host.into_iter().collect(),
-                            system_id: row.get(7),
-                        }
+                            system_id: row.get(8),
+                        })
                     })
                     .collect()
                     .map(|(events, connection)| {
                         // Future::map()
-                        (Event::condense_events(events), connection)
+                        (
+                            Event::condense_events(
+                                events.into_iter().filter_map(Result::ok).collect(),
+                            ),
+                            connection,
+                        )
                     })
                     .map_err(lookup_error)
             })
@@ -341,8 +387,8 @@ impl Event {
 
 #[derive(Clone, Debug)]
 pub struct CreateEvent {
-    pub start_date: DateTime<Utc>,
-    pub end_date: DateTime<Utc>,
+    pub start_date: DateTime<Tz>,
+    pub end_date: DateTime<Tz>,
     pub title: String,
     pub description: String,
     pub hosts: Vec<User>,
@@ -355,7 +401,7 @@ impl CreateEvent {
         chat_system: &ChatSystem,
         connection: Connection,
     ) -> impl Future<Item = (Event, Connection), Error = (EventError, Connection)> {
-        let sql = "INSERT INTO events (start_date, end_date, title, description, system_id) VALUES ($1, $2, $3, $4, $5) RETURNING id";
+        let sql = "INSERT INTO events (start_date, end_date, title, description, system_id, timezone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id";
 
         let CreateEvent {
             start_date,
@@ -402,19 +448,31 @@ impl CreateEvent {
 fn insert_event(
     sql: &str,
     id: i32,
-    start_date: DateTime<Utc>,
-    end_date: DateTime<Utc>,
+    start_date: DateTime<Tz>,
+    end_date: DateTime<Tz>,
     title: String,
     description: String,
     hosts: Vec<User>,
     transaction: Transaction,
 ) -> impl Future<Item = (Event, Transaction), Error = (EventError, Transaction)> {
+    let sd = start_date.with_timezone(&Utc);
+    let ed = end_date.with_timezone(&Utc);
     transaction
         .prepare(sql)
         .map_err(transaction_prepare_error)
         .and_then(move |(s, transaction)| {
             transaction
-                .query(&s, &[&start_date, &end_date, &title, &description, &id])
+                .query(
+                    &s,
+                    &[
+                        &sd,
+                        &ed,
+                        &title,
+                        &description,
+                        &id,
+                        &start_date.timezone().name(),
+                    ],
+                )
                 .map(move |row| Event {
                     id: row.get(0),
                     start_date: start_date,

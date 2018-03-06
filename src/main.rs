@@ -19,7 +19,6 @@ extern crate telebot;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_postgres;
-extern crate tokio_timer;
 
 mod actors;
 mod conn;
@@ -33,6 +32,7 @@ use actors::db_broker::DbBroker;
 use actors::event_actor::EventActor;
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_message_actor::{StartStreaming, TelegramMessageActor};
+use actors::timer::Timer;
 use actors::users_actor::UsersActor;
 use conn::prepare_database_connection;
 use telebot::RcBot;
@@ -73,7 +73,10 @@ fn main() {
 
     let tg: Address<_> = TelegramActor::new(actor_bot, db_broker.clone()).start();
 
-    let sync_event_actor: SyncAddress<_> = EventActor::new(tg.clone(), db_broker.clone()).start();
+    let timer: Address<_> = Timer::new(db_broker.clone(), tg.clone()).start();
+
+    let sync_event_actor: SyncAddress<_> =
+        EventActor::new(tg.clone(), db_broker.clone(), timer).start();
 
     let msg_actor_bot = RcBot::new(Arbiter::handle().clone(), &bot_token);
 

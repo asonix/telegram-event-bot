@@ -1,6 +1,6 @@
 use actix::ResponseType;
 use chrono::DateTime;
-use chrono::offset::Utc;
+use chrono_tz::Tz;
 use telebot::objects::Integer;
 
 use error::EventError;
@@ -31,10 +31,11 @@ impl ResponseType for NewChat {
     type Error = EventError;
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NewUser {
     pub chat_id: Integer,
     pub user_id: Integer,
+    pub username: String,
 }
 
 impl ResponseType for NewUser {
@@ -68,8 +69,8 @@ pub struct NewEvent {
     pub system_id: i32,
     pub title: String,
     pub description: String,
-    pub start_date: DateTime<Utc>,
-    pub end_date: DateTime<Utc>,
+    pub start_date: DateTime<Tz>,
+    pub end_date: DateTime<Tz>,
     pub hosts: Vec<i32>,
 }
 
@@ -90,8 +91,8 @@ impl ResponseType for DeleteEvent {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GetEventsInRange {
-    pub start_date: DateTime<Utc>,
-    pub end_date: DateTime<Utc>,
+    pub start_date: DateTime<Tz>,
+    pub end_date: DateTime<Tz>,
 }
 
 impl ResponseType for GetEventsInRange {

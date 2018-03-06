@@ -38,6 +38,10 @@ impl Handler<Ready> for DbBroker {
 
     fn handle(&mut self, msg: Ready, _: &mut Self::Context) -> Self::Result {
         self.db_actors.0.borrow_mut().push_back(msg.db_actor);
+        debug!(
+            "Restored db connection, total available connections: {}",
+            self.db_actors.0.borrow().len()
+        );
     }
 }
 

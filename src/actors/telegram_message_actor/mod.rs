@@ -101,6 +101,7 @@ impl TelegramMessageActor {
                 let db = self.db.clone();
 
                 let user_id = user.id;
+                let username = user.username.unwrap_or(user.first_name);
                 let chat_id = message.chat.id;
 
                 Arbiter::handle().spawn(
@@ -113,7 +114,11 @@ impl TelegramMessageActor {
                                     db.send(NewRelation { chat_id, user_id });
                                 }
                                 UserState::NewUser => {
-                                    db.send(NewUser { chat_id, user_id });
+                                    db.send(NewUser {
+                                        chat_id,
+                                        user_id,
+                                        username,
+                                    });
                                 }
                                 _ => (),
                             })
@@ -155,6 +160,7 @@ impl TelegramMessageActor {
                         let db = self.db.clone();
 
                         let user_id = user.id;
+                        let username = user.username.unwrap_or(user.first_name);
                         let chat_id = message.chat.id;
 
                         Arbiter::handle().spawn(
@@ -167,7 +173,11 @@ impl TelegramMessageActor {
                                             db.send(NewRelation { chat_id, user_id });
                                         }
                                         UserState::NewUser => {
-                                            db.send(NewUser { chat_id, user_id });
+                                            db.send(NewUser {
+                                                chat_id,
+                                                user_id,
+                                                username,
+                                            });
                                         }
                                         _ => (),
                                     })

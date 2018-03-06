@@ -1,5 +1,4 @@
 use actix::{Address, Arbiter};
-use chrono::offset::Utc;
 use event_web::Event as FrontendEvent;
 use event_web::verify_secret;
 use failure::Fail;
@@ -9,18 +8,23 @@ use actors::db_broker::DbBroker;
 use actors::db_actor::messages::{DeleteEventLink, EventLinkByUserId, NewEvent};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::NewEvent as TgNewEvent;
+use actors::timer::Timer;
+use actors::timer::messages::Events;
 use error::{EventError, EventErrorKind};
 use util::flatten;
+
+mod actor;
 
 #[derive(Clone)]
 pub struct EventActor {
     tg: Address<TelegramActor>,
     db: Address<DbBroker>,
+    timer: Address<Timer>,
 }
 
 impl EventActor {
-    pub fn new(tg: Address<TelegramActor>, db: Address<DbBroker>) -> Self {
-        EventActor { tg, db }
+    pub fn new(tg: Address<TelegramActor>, db: Address<DbBroker>, timer: Address<Timer>) -> Self {
+        EventActor { tg, db, timer }
     }
 
     fn new_event(&mut self, event: FrontendEvent, id: String) {
@@ -35,6 +39,7 @@ impl EventActor {
                 let database = self.db.clone();
 
                 let tg = self.tg.clone();
+                let timer = self.timer.clone();
 
                 Arbiter::handle().spawn(
                     self.db
@@ -58,37 +63,23 @@ impl EventActor {
                                             system_id: nel.system_id(),
                                             title: event.title().to_owned(),
                                             description: event.description().to_owned(),
-                                            start_date: event.start_date().with_timezone(&Utc),
-                                            end_date: event.end_date().with_timezone(&Utc),
+                                            start_date: event.start_date(),
+                                            end_date: event.end_date(),
                                             hosts: vec![nel.user_id()],
                                         })
                                         .then(flatten::<NewEvent>)
-                                        .map(move |event| tg.send(TgNewEvent(event))),
+                                        .map(move |event| {
+                                            tg.send(TgNewEvent(event.clone()));
+                                            timer.send(Events {
+                                                events: vec![event],
+                                            });
+                                        }),
                                 )
                         })
                         .map(|_| ())
                         .map_err(|e| error!("Error: {:?}", e)),
                 )
             }
-        }
-    }
-}
-
-mod actor {
-    use actix::{Actor, Context, Handler};
-    use event_web::NewEvent;
-
-    use super::EventActor;
-
-    impl Actor for EventActor {
-        type Context = Context<Self>;
-    }
-
-    impl Handler<NewEvent> for EventActor {
-        type Result = ();
-
-        fn handle(&mut self, msg: NewEvent, _: &mut Self::Context) -> Self::Result {
-            self.new_event(msg.0, msg.1);
         }
     }
 }

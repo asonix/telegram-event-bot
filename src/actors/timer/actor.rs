@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use actix::{Actor, ActorContext, Address, Arbiter, AsyncContext, Context, Handler};
+use actix::{Actor, Address, Arbiter, AsyncContext, Context, Handler};
 use futures::{Future, Stream};
 use tokio_core::reactor::Interval;
 
@@ -11,12 +11,23 @@ impl Actor for Timer {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
+        debug!("Started Timer Actor");
         ctx.add_stream(
-            Interval::new(Duration::from_secs(60 * 60), &Arbiter::handle())
+            Interval::new(Duration::from_secs(30 * 60), &Arbiter::handle())
                 .unwrap()
                 .map(|_| NextHour)
                 .map_err(|_| Shutdown),
         );
+
+        ctx.add_stream(
+            Interval::new(Duration::from_secs(30), &Arbiter::handle())
+                .unwrap()
+                .map(|_| Migrate)
+                .map_err(|_| MigrateError),
+        );
+
+        ctx.address::<Address<_>>().send(Ok(NextHour));
+        ctx.address::<Address<_>>().send(Ok(Migrate));
     }
 }
 
@@ -37,7 +48,38 @@ impl Handler<Result<NextHour, Shutdown>> for Timer {
                 Arbiter::handle().spawn(fut);
             }
             Err(_) => {
-                ctx.stop();
+                error!("Interval for NextHour errored");
+                ctx.add_stream(
+                    Interval::new(Duration::from_secs(60 * 60), &Arbiter::handle())
+                        .unwrap()
+                        .map(|_| NextHour)
+                        .map_err(|_| Shutdown),
+                );
+            }
+        }
+    }
+}
+
+impl Handler<Result<Migrate, MigrateError>> for Timer {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        res: Result<Migrate, MigrateError>,
+        ctx: &mut Self::Context,
+    ) -> Self::Result {
+        match res {
+            Ok(_) => {
+                self.migrate_events();
+            }
+            Err(_) => {
+                error!("Interval for Migrate errored");
+                ctx.add_stream(
+                    Interval::new(Duration::from_secs(30), &Arbiter::handle())
+                        .unwrap()
+                        .map(|_| Migrate)
+                        .map_err(|_| MigrateError),
+                );
             }
         }
     }
@@ -47,9 +89,6 @@ impl Handler<Events> for Timer {
     type Result = ();
 
     fn handle(&mut self, msg: Events, _: &mut Self::Context) -> Self::Result {
-        let Events { events } = msg;
-
-        self.set_deleters(&events);
-        self.set_notifiers(events);
+        self.handle_events(msg.events);
     }
 }

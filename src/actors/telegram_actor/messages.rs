@@ -7,9 +7,25 @@ use error::EventError;
 use models::event::Event;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NotifyEvent(pub Event);
+pub struct EventSoon(pub Event);
 
-impl ResponseType for NotifyEvent {
+impl ResponseType for EventSoon {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventStarted(pub Event);
+
+impl ResponseType for EventStarted {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventOver(pub Event);
+
+impl ResponseType for EventOver {
     type Item = ();
     type Error = ();
 }
@@ -18,17 +34,6 @@ impl ResponseType for NotifyEvent {
 pub struct NewEvent(pub Event);
 
 impl ResponseType for NewEvent {
-    type Item = ();
-    type Error = ();
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EventOver {
-    pub event_id: i32,
-    pub system_id: i32,
-}
-
-impl ResponseType for EventOver {
     type Item = ();
     type Error = ();
 }

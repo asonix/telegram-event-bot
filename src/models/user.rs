@@ -23,11 +23,20 @@ use util::*;
 pub struct User {
     id: i32,
     user_id: Integer,
+    username: String,
 }
 
 impl User {
-    pub fn maybe_from_parts(id: Option<i32>, user_id: Option<Integer>) -> Option<Self> {
-        id.and_then(|id| user_id.map(|user_id| User { id, user_id }))
+    pub fn maybe_from_parts(
+        id: Option<i32>,
+        user_id: Option<Integer>,
+        username: Option<String>,
+    ) -> Option<Self> {
+        Some(User {
+            id: id?,
+            user_id: user_id?,
+            username: username?,
+        })
     }
 
     pub fn id(&self) -> i32 {
@@ -38,11 +47,15 @@ impl User {
         self.user_id
     }
 
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
     pub fn by_user_ids(
         user_ids: Vec<Integer>,
         connection: Connection,
     ) -> impl Future<Item = (Vec<User>, Connection), Error = (EventError, Connection)> {
-        let sql = "SELECT usr.id, usr.user_id FROM users AS usr WHERE usr.user_id IN";
+        let sql = "SELECT usr.id, usr.user_id, usr.username FROM users AS usr WHERE usr.user_id IN";
 
         let values = user_ids
             .iter()
@@ -66,6 +79,7 @@ impl User {
                     .map(move |row| User {
                         id: row.get(0),
                         user_id: row.get(1),
+                        username: row.get(2),
                     })
                     .collect()
                     .map_err(lookup_error)
@@ -76,7 +90,7 @@ impl User {
         ids: Vec<i32>,
         connection: Connection,
     ) -> impl Future<Item = (Vec<User>, Connection), Error = (EventError, Connection)> {
-        let sql = "SELECT usr.id, usr.user_id FROM users AS usr WHERE usr.id IN";
+        let sql = "SELECT usr.id, usr.user_id, usr.username FROM users AS usr WHERE usr.id IN";
 
         let values = ids.iter()
             .fold((Vec::new(), 1), |(mut acc, count), _| {
@@ -99,6 +113,7 @@ impl User {
                     .map(move |row| User {
                         id: row.get(0),
                         user_id: row.get(1),
+                        username: row.get(2),
                     })
                     .collect()
                     .map_err(lookup_error)
@@ -115,7 +130,7 @@ impl User {
     pub fn get_with_chats(
         connection: Connection,
     ) -> impl Future<Item = (Vec<(User, Chat)>, Connection), Error = (EventError, Connection)> {
-        let sql = "SELECT usr.id, usr.user_id, ch.id, ch.chat_id
+        let sql = "SELECT usr.id, usr.user_id, usr.username, ch.id, ch.chat_id
                     FROM users AS usr
                     INNER JOIN user_chats AS uc ON uc.users_id = usr.id
                     INNER JOIN chats AS ch ON uc.chats_id = ch.id";
@@ -131,8 +146,9 @@ impl User {
                             User {
                                 id: row.get(0),
                                 user_id: row.get(1),
+                                username: row.get(2),
                             },
-                            Chat::from_parts(row.get(2), row.get(3)),
+                            Chat::from_parts(row.get(3), row.get(4)),
                         )
                     })
                     .collect()
@@ -217,6 +233,7 @@ impl User {
 
 pub struct CreateUser {
     pub user_id: Integer,
+    pub username: String,
 }
 
 impl CreateUser {
@@ -249,10 +266,10 @@ impl CreateUser {
         chat: &Chat,
         connection: Connection,
     ) -> impl Future<Item = (User, Connection), Error = (EventError, Connection)> {
-        let sql = "INSERT INTO users (user_id) VALUES ($1) RETURNING id";
+        let sql = "INSERT INTO users (user_id, username) VALUES ($1, $2) RETURNING id";
         let join_sql = "INSERT INTO user_chats (users_id, chats_id) VALUES ($1, $2)";
 
-        let CreateUser { user_id } = self;
+        let CreateUser { user_id, username } = self;
 
         let chats_id = chat.id();
 
@@ -265,10 +282,11 @@ impl CreateUser {
                     .map_err(transaction_prepare_error)
                     .and_then(move |(s, transaction)| {
                         transaction
-                            .query(&s, &[&user_id])
+                            .query(&s, &[&user_id, &username])
                             .map(move |row| User {
                                 id: row.get(0),
                                 user_id: user_id,
+                                username: username.clone(),
                             })
                             .collect()
                             .map_err(transaction_insert_error)

@@ -30,7 +30,7 @@ impl TelegramActor {
         TelegramActor { bot, db }
     }
 
-    fn notify_event(&self, event: Event) {
+    fn event_soon(&self, event: Event) {
         let bot = self.bot.clone();
 
         let fut = self.db
@@ -51,15 +51,64 @@ impl TelegramActor {
         self.bot.inner.handle.spawn(fut);
     }
 
+    fn event_over(&self, event: Event) {
+        let bot = self.bot.clone();
+
+        let id = event.id();
+        let system_id = event.system_id();
+
+        let fut = self.db
+            .call_fut(GetChatSystemByEventId {
+                event_id: event.id(),
+            })
+            .then(flatten::<GetChatSystemByEventId>)
+            .and_then(move |chat_system| {
+                bot.message(
+                    chat_system.events_channel(),
+                    format!("{} has ended!", event.title()),
+                ).send()
+                    .map_err(|e| e.context(EventErrorKind::Telegram).into())
+            })
+            .map(|_| ())
+            .map_err(|e| error!("Error: {:?}", e));
+
+        self.bot.inner.handle.spawn(fut);
+
+        self.query_events(id, system_id);
+    }
+
+    fn event_started(&self, event: Event) {
+        let bot = self.bot.clone();
+
+        let fut = self.db
+            .call_fut(GetChatSystemByEventId {
+                event_id: event.id(),
+            })
+            .then(flatten::<GetChatSystemByEventId>)
+            .and_then(move |chat_system| {
+                bot.message(
+                    chat_system.events_channel(),
+                    format!("{} has started!", event.title()),
+                ).send()
+                    .map_err(|e| e.context(EventErrorKind::Telegram).into())
+            })
+            .map(|_| ())
+            .map_err(|e| error!("Error: {:?}", e));
+
+        self.bot.inner.handle.spawn(fut);
+    }
+
     fn new_event(&self, event: Event) {
         let localtime = event.start_date().with_timezone(&Central);
         let when = format_date(localtime);
         let hosts = event
             .hosts()
             .iter()
-            .map(|host| format!("{}", host.user_id()))
+            .map(|host| format!("@{}", host.username()))
             .collect::<Vec<_>>()
             .join(", ");
+
+        let length = format_duration(&event);
 
         let bot = self.bot.clone();
 
@@ -72,9 +121,10 @@ impl TelegramActor {
                 bot.message(
                     chat_system.events_channel(),
                     format!(
-                        "{}\nWhen: {}\nDescription: {}\nHosts: {}",
+                        "New Event!\n{}\nWhen: {}\nDuration: {}\nDescription: {}\nHosts: {}",
                         event.title(),
                         when,
+                        length,
                         event.description(),
                         hosts
                     ),
@@ -94,28 +144,37 @@ impl TelegramActor {
         let fut = self.db
             .call_fut(LookupSystem { system_id })
             .then(flatten::<LookupSystem>)
+            .map_err(|e| {
+                error!("LookupSystem");
+                e
+            })
             .and_then(move |chat_system: ChatSystem| {
                 db.call_fut(GetEventsForSystem { system_id })
                     .then(flatten::<GetEventsForSystem>)
+                    .map_err(|e| {
+                        error!("GetEventsForSystem");
+                        e
+                    })
                     .and_then(move |events: Vec<Event>| {
                         let events = events
                             .into_iter()
                             .filter(|event| event.id() != event_id)
                             .map(|event| {
-                                // TODO: handle more than central time
                                 let localtime = event.start_date().with_timezone(&Central);
                                 let when = format_date(localtime);
+                                let duration = format_duration(&event);
                                 let hosts = event
                                     .hosts()
                                     .iter()
-                                    .map(|host| format!("{}", host.user_id()))
+                                    .map(|host| format!("@{}", host.username()))
                                     .collect::<Vec<_>>()
                                     .join(", ");
 
                                 format!(
-                                    "{}\nWhen: {}\nDescription: {}\nHosts: {}",
+                                    "{}\nWhen: {}\nDuration: {}\nDescription: {}\nHosts: {}",
                                     event.title(),
                                     when,
+                                    duration,
                                     event.description(),
                                     hosts
                                 )
@@ -123,10 +182,14 @@ impl TelegramActor {
                             .collect::<Vec<_>>()
                             .join("\n\n");
 
-                        bot.message(
-                            chat_system.events_channel(),
-                            format!("Events:\n\n{}", events),
-                        ).send()
+                        let msg = if events.len() > 0 {
+                            format!("Upcoming Events:\n\n{}", events)
+                        } else {
+                            "No upcoming events".to_owned()
+                        };
+
+                        bot.message(chat_system.events_channel(), msg)
+                            .send()
                             .map_err(|e| e.context(EventErrorKind::Telegram).into())
                     })
             });
@@ -260,6 +323,24 @@ impl TelegramActor {
     }
 }
 
+fn format_duration(event: &Event) -> String {
+    let duration = event
+        .end_date()
+        .signed_duration_since(event.start_date().clone());
+
+    if duration.num_weeks() > 0 {
+        format!("{} Weeks", duration.num_weeks())
+    } else if duration.num_days() > 0 {
+        format!("{} Days", duration.num_days())
+    } else if duration.num_hours() > 0 {
+        format!("{} Hours", duration.num_hours())
+    } else if duration.num_minutes() > 0 {
+        format!("{} Minutes", duration.num_minutes())
+    } else {
+        "No time".to_owned()
+    }
+}
+
 fn format_date<T>(localtime: DateTime<T>) -> String
 where
     T: TimeZone + Debug,
@@ -297,10 +378,16 @@ where
         _ => "th",
     };
 
+    let minute = if localtime.minute() > 9 {
+        format!("{}", localtime.minute())
+    } else {
+        format!("0{}", localtime.minute())
+    };
+
     format!(
         "{}:{} {:?}, {}, {} {}{}",
         localtime.hour(),
-        localtime.minute(),
+        minute,
         localtime.timezone(),
         weekday,
         month,

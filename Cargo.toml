@@ -19,7 +19,6 @@ rand = "0.4"
 time = "0.1"
 telebot = { git = "https://github.com/asonix/telebot", branch = "asonix/hyper" }
 tokio-core = "0.1"
-tokio-timer = "0.1"
 
 [dependencies.tokio-postgres]
 version = "0.3"

@@ -24,3 +24,17 @@ impl ResponseType for Shutdown {
     type Item = ();
     type Error = ();
 }
+
+pub struct Migrate;
+
+impl ResponseType for Migrate {
+    type Item = ();
+    type Error = ();
+}
+
+pub struct MigrateError;
+
+impl ResponseType for MigrateError {
+    type Item = ();
+    type Error = ();
+}

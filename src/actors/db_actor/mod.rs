@@ -1,6 +1,6 @@
 use actix::Address;
 use chrono::DateTime;
-use chrono::offset::Utc;
+use chrono_tz::Tz;
 use futures::{Future, IntoFuture};
 use telebot::objects::Integer;
 use tokio_postgres::Connection;
@@ -41,8 +41,8 @@ impl DbActor {
         system_id: i32,
         title: String,
         description: String,
-        start_date: DateTime<Utc>,
-        end_date: DateTime<Utc>,
+        start_date: DateTime<Tz>,
+        end_date: DateTime<Tz>,
         hosts: Vec<i32>,
     ) -> impl Future<Item = (Event, Connection), Error = Result<(EventError, Connection), EventError>>
     {
@@ -142,6 +142,7 @@ impl DbActor {
         &mut self,
         chat_id: Integer,
         user_id: Integer,
+        username: String,
     ) -> impl Future<Item = (User, Connection), Error = Result<(EventError, Connection), EventError>>
     {
         self.take_connection()
@@ -149,7 +150,7 @@ impl DbActor {
             .map_err(Err)
             .and_then(move |connection| Chat::by_chat_id(chat_id, connection).map_err(Ok))
             .and_then(move |(chat, connection)| {
-                let new_user = CreateUser { user_id };
+                let new_user = CreateUser { user_id, username };
 
                 new_user.create(&chat, connection).map_err(Ok)
             })
@@ -171,8 +172,8 @@ impl DbActor {
 
     fn get_events_in_range(
         &mut self,
-        start_date: DateTime<Utc>,
-        end_date: DateTime<Utc>,
+        start_date: DateTime<Tz>,
+        end_date: DateTime<Tz>,
     ) -> impl Future<Item = (Vec<Event>, Connection), Error = Result<(EventError, Connection), EventError>>
     {
         self.take_connection()

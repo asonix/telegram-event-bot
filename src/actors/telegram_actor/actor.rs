@@ -16,11 +16,19 @@ impl Handler<NewEvent> for TelegramActor {
     }
 }
 
-impl Handler<NotifyEvent> for TelegramActor {
+impl Handler<EventSoon> for TelegramActor {
     type Result = ();
 
-    fn handle(&mut self, msg: NotifyEvent, _: &mut Self::Context) -> Self::Result {
-        self.notify_event(msg.0);
+    fn handle(&mut self, msg: EventSoon, _: &mut Self::Context) -> Self::Result {
+        self.event_soon(msg.0);
+    }
+}
+
+impl Handler<EventStarted> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: EventStarted, _: &mut Self::Context) -> Self::Result {
+        self.event_started(msg.0);
     }
 }
 
@@ -28,7 +36,7 @@ impl Handler<EventOver> for TelegramActor {
     type Result = ();
 
     fn handle(&mut self, msg: EventOver, _: &mut Self::Context) -> Self::Result {
-        self.query_events(msg.event_id, msg.system_id);
+        self.event_over(msg.0);
     }
 }
 

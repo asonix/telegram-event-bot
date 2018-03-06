@@ -250,8 +250,8 @@ impl ChatSystem {
         let sql = "SELECT
                         sys.id, sys.events_channel,
                         ch.id, ch.chat_id,
-                        ev.id, ev.start_date, ev.end_date, ev.title, ev.description,
-                        usr.id, usr.user_id
+                        ev.id, ev.start_date, ev.end_date, ev.title, ev.description, ev.timezone,
+                        usr.id, usr.user_id, usr.username
                     FROM chats AS ch
                     INNER JOIN chat_systems AS sys ON ch.system_id = sys.id
                     LEFT JOIN events AS ev ON ev.system_id = sys.id
@@ -281,8 +281,10 @@ impl ChatSystem {
                             row.get(7),
                             row.get(8),
                             Some(row.get(0)),
+                            row.get(9),
                         ).map(|mut ev| {
-                            let host = User::maybe_from_parts(row.get(9), row.get(10));
+                            let host =
+                                User::maybe_from_parts(row.get(10), row.get(11), row.get(12));
 
                             ev.add_host(host);
                             ev
