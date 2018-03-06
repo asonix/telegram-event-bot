@@ -174,7 +174,7 @@ impl Timer {
                     let should_have_ended = now > end;
                     let ending_soon = now + OldDuration::hours(1) > end;
                     let should_have_started = now > start;
-                    let should_have_been_notified = now - OldDuration::minutes(45) < start;
+                    let starting_soon = now + OldDuration::minutes(45) > start;
                     let should_drop = now - OldDuration::hours(1) > start;
 
                     if should_have_ended {
@@ -198,7 +198,7 @@ impl Timer {
                                 self.futures[end_index].insert(event.id());
                                 self.states.insert(event.id(), TimerState::Future);
                             }
-                        } else if should_have_been_notified {
+                        } else if starting_soon {
                             debug!("Starting soon");
                             self.waiting_start[event.start_date().minute() as usize]
                                 .insert(event.id());
