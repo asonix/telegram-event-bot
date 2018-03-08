@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use chrono::DateTime;
@@ -54,32 +53,6 @@ impl Hash for Event {
 }
 
 impl Event {
-    pub fn maybe_from_parts(
-        id: Option<i32>,
-        start_date: Option<DateTime<Utc>>,
-        end_date: Option<DateTime<Utc>>,
-        title: Option<String>,
-        description: Option<String>,
-        system_id: Option<i32>,
-        timezone: Option<String>,
-    ) -> Option<Self> {
-        let timezone = timezone?.parse::<Tz>().ok()?;
-
-        Some(Event {
-            id: id?,
-            start_date: start_date?.with_timezone(&timezone),
-            end_date: end_date?.with_timezone(&timezone),
-            title: title?,
-            description: description?,
-            hosts: Vec::new(),
-            system_id: system_id?,
-        })
-    }
-
-    pub fn add_host(&mut self, host: Option<User>) {
-        self.hosts.extend(host);
-    }
-
     pub fn id(&self) -> i32 {
         self.id
     }
@@ -106,25 +79,6 @@ impl Event {
 
     pub fn system_id(&self) -> i32 {
         self.system_id
-    }
-
-    fn condense_events_unordered(events: Vec<Self>) -> HashMap<i32, Self> {
-        events.into_iter().fold(HashMap::new(), |mut acc, event| {
-            let updated = {
-                if let Some(mut stored_event) = acc.get_mut(&event.id) {
-                    stored_event.hosts.extend(event.hosts.clone());
-                    true
-                } else {
-                    false
-                }
-            };
-
-            if !updated {
-                acc.insert(event.id, event);
-            }
-
-            acc
-        })
     }
 
     pub fn condense(events: &mut Vec<Self>, mut event_1: Self, event_2: Self) {
@@ -267,14 +221,6 @@ impl Event {
             .and_then(move |(s, connection)| connection.execute(&s, &[&id]).map_err(delete_error))
     }
 
-    /// Delete an `Event` and all associated `hosts`
-    pub fn delete(
-        self,
-        connection: Connection,
-    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
-        Event::delete_by_id(self.id, connection)
-    }
-
     /// Get a `Vec<Event>` with events happening within the next `start_date` to `end_date`
     pub fn in_range(
         start_date: DateTime<Tz>,
@@ -372,61 +318,6 @@ impl Event {
                             connection,
                         )
                     })
-            })
-    }
-
-    /// Given a chat id, lookup all associated events
-    ///
-    /// This event list is unordered, which improves lookup time, but may be slower if the end result
-    /// must be provided in order of date
-    pub fn by_chat_id_unordered(
-        chat_id: Integer,
-        connection: Connection,
-    ) -> impl Future<Item = (HashMap<i32, Self>, Connection), Error = (EventError, Connection)>
-    {
-        let sql =
-            "SELECT evt.id, evt.start_date, evt.end_date, evt.title, evt.description, evt.timezone, usr.id, usr.user_id, usr.username, sys.id
-               FROM events AS evt
-               INNER JOIN chat_systems AS sys ON evt.system_id = sys.id
-               INNER JOIN chats AS ch ON ch.system_id = sys.id
-               LEFT JOIN hosts AS h ON h.events_id = evt.id
-               LEFT JOIN users AS usr ON h.users_id = usr.id
-               WHERE ch.id = $1";
-        debug!("{}", sql);
-
-        connection
-            .prepare(sql)
-            .map_err(prepare_error)
-            .and_then(move |(s, connection)| {
-                connection
-                    .query(&s, &[&chat_id])
-                    .map(|row| {
-                        let host = User::maybe_from_parts(row.get(6), row.get(7), row.get(8));
-                        let tz: String = row.get(5);
-
-                        let sd: DateTime<Utc> = row.get(1);
-                        let ed: DateTime<Utc> = row.get(2);
-
-                        tz.parse::<Tz>().map(|timezone| Event {
-                            id: row.get(0),
-                            start_date: sd.with_timezone(&timezone),
-                            end_date: ed.with_timezone(&timezone),
-                            title: row.get(3),
-                            description: row.get(4),
-                            hosts: host.into_iter().collect(),
-                            system_id: row.get(8),
-                        })
-                    })
-                    .collect()
-                    .map(|(events, connection)| {
-                        (
-                            Event::condense_events_unordered(
-                                events.into_iter().filter_map(Result::ok).collect(),
-                            ),
-                            connection,
-                        )
-                    })
-                    .map_err(lookup_error)
             })
     }
 

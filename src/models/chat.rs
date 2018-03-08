@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use futures::Future;
 use futures_state_stream::StateStream;
 use telebot::objects::Integer;
@@ -7,7 +5,6 @@ use tokio_postgres::Connection;
 
 use error::{EventError, EventErrorKind};
 use super::chat_system::ChatSystem;
-use super::event::Event;
 use util::*;
 
 /// Chat represents a single telegram chat
@@ -67,43 +64,6 @@ impl Chat {
                     Err((EventErrorKind::Lookup.into(), connection))
                 }
             })
-    }
-
-    pub fn get_events(
-        &self,
-        connection: Connection,
-    ) -> impl Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)> {
-        Event::by_chat_id(self.chat_id, connection)
-    }
-
-    pub fn get_system_with_events(
-        &self,
-        connection: Connection,
-    ) -> impl Future<
-        Item = ((Option<ChatSystem>, HashSet<Chat>, Vec<Event>), Connection),
-        Error = (EventError, Connection),
-    > {
-        ChatSystem::full_by_chat_id(self.chat_id, connection)
-    }
-
-    pub fn delete_by_id(
-        id: i32,
-        connection: Connection,
-    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
-        let sql = "DELETE FROM chats AS ch WHERE ch.id = $1";
-        debug!("{}", sql);
-
-        connection
-            .prepare(sql)
-            .map_err(prepare_error)
-            .and_then(move |(s, connection)| connection.execute(&s, &[&id]).map_err(delete_error))
-    }
-
-    pub fn delete(
-        self,
-        connection: Connection,
-    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
-        Chat::delete_by_id(self.id, connection)
     }
 }
 

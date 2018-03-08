@@ -6,7 +6,6 @@ use tokio_postgres::types::ToSql;
 
 use error::{EventError, EventErrorKind};
 use super::chat::Chat;
-use super::chat_system::ChatSystem;
 use util::*;
 
 /// User represents a user that belongs to at least one chat in a system
@@ -122,13 +121,6 @@ impl User {
             })
     }
 
-    pub fn get_systems(
-        &self,
-        connection: Connection,
-    ) -> impl Future<Item = (Vec<ChatSystem>, Connection), Error = (EventError, Connection)> {
-        ChatSystem::by_user_id(self.user_id, connection)
-    }
-
     pub fn get_with_chats(
         connection: Connection,
     ) -> impl Future<Item = (Vec<(User, Chat)>, Connection), Error = (EventError, Connection)> {
@@ -181,26 +173,6 @@ impl User {
             })
     }
 
-    pub fn delete_by_id(
-        id: i32,
-        connection: Connection,
-    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
-        let sql = "DELETE FROM users AS usr WHERE usr.id = $1";
-        debug!("{}", sql);
-
-        connection
-            .prepare(sql)
-            .map_err(prepare_error)
-            .and_then(move |(s, connection)| connection.execute(&s, &[&id]).map_err(delete_error))
-    }
-
-    pub fn delete(
-        self,
-        connection: Connection,
-    ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
-        User::delete_by_id(self.id, connection)
-    }
-
     pub fn delete_relation_by_ids(
         user_id: Integer,
         chat_id: Integer,
@@ -226,14 +198,6 @@ impl User {
                         }
                     })
             })
-    }
-
-    pub fn delete_relation(
-        &self,
-        chat: &Chat,
-        connection: Connection,
-    ) -> impl Future<Item = ((), Connection), Error = (EventError, Connection)> {
-        User::delete_relation_by_ids(self.user_id, chat.chat_id(), connection)
     }
 }
 
