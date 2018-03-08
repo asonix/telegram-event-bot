@@ -23,8 +23,17 @@ pub mod messages;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum CallbackQueryMessage {
-    NewEvent { channel_id: Integer },
-    EditEvent { event_id: i32 },
+    NewEvent {
+        channel_id: Integer,
+    },
+    EditEvent {
+        event_id: i32,
+    },
+    DeleteEvent {
+        event_id: i32,
+        system_id: i32,
+        title: String,
+    },
 }
 
 pub struct TelegramActor {
@@ -198,38 +207,9 @@ impl TelegramActor {
                         let events = events
                             .into_iter()
                             .filter(|event| event.id() != event_id)
-                            .map(|event| {
-                                let localtime = event.start_date().with_timezone(&Central);
-                                let when = format_date(localtime);
-                                let duration = format_duration(&event);
-                                let hosts = event
-                                    .hosts()
-                                    .iter()
-                                    .map(|host| format!("@{}", host.username()))
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
+                            .collect();
 
-                                format!(
-                                    "{}\nWhen: {}\nDuration: {}\nDescription: {}\nHosts: {}",
-                                    event.title(),
-                                    when,
-                                    duration,
-                                    event.description(),
-                                    hosts
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n\n");
-
-                        let msg = if events.len() > 0 {
-                            format!("Upcoming Events:\n\n{}", events)
-                        } else {
-                            "No upcoming events".to_owned()
-                        };
-
-                        bot.message(chat_system.events_channel(), msg)
-                            .send()
-                            .map_err(|e| e.context(EventErrorKind::Telegram).into())
+                        print_events(bot, chat_system.events_channel(), events)
                     })
             });
 
@@ -302,6 +282,52 @@ impl TelegramActor {
             .inner
             .handle
             .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+    }
+
+    fn ask_delete_events(&self, events: Vec<Event>, chat_id: Integer) {
+        let bot = self.bot.clone();
+        let bot2 = bot.clone();
+
+        let fut = iter_ok(events)
+            .map(|event| {
+                InlineKeyboardButton::new(event.title().to_owned()).callback_data(
+                    serde_json::to_string(&CallbackQueryMessage::DeleteEvent {
+                        event_id: event.id(),
+                        system_id: event.system_id(),
+                        title: event.title().to_owned(),
+                    }).unwrap(),
+                )
+            })
+            .collect()
+            .and_then(move |buttons| {
+                bot2.message(chat_id, "Which event would you like to delete?".to_owned())
+                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                    .send()
+                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
+            });
+
+        self.bot
+            .inner
+            .handle
+            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+    }
+
+    fn event_deleted(&mut self, chat_id: Integer, channel_id: Integer, title: String) {
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(chat_id, "Deleted event!".to_owned())
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(channel_id, format!("Event deleted: {}", title))
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
     }
 
     fn is_admin(
@@ -392,6 +418,12 @@ impl TelegramActor {
                 .map_err(|e| error!("Error: {:?}", e)),
         )
     }
+
+    fn send_events(&mut self, chat_id: Integer, events: Vec<Event>) {
+        self.bot.inner.handle.spawn(
+            print_events(self.bot.clone(), chat_id, events).map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
 }
 
 fn format_duration(event: &Event) -> String {
@@ -410,6 +442,48 @@ fn format_duration(event: &Event) -> String {
     } else {
         "No time".to_owned()
     }
+}
+
+fn print_events(
+    bot: RcBot,
+    chat_id: Integer,
+    events: Vec<Event>,
+) -> impl Future<Item = (), Error = EventError> {
+    let events = events
+        .into_iter()
+        .map(|event| {
+            let localtime = event.start_date().with_timezone(&Central);
+            let when = format_date(localtime);
+            let duration = format_duration(&event);
+            let hosts = event
+                .hosts()
+                .iter()
+                .map(|host| format!("@{}", host.username()))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            format!(
+                "{}\nWhen: {}\nDuration: {}\nDescription: {}\nHosts: {}",
+                event.title(),
+                when,
+                duration,
+                event.description(),
+                hosts
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let msg = if events.len() > 0 {
+        format!("Upcoming Events:\n\n{}", events)
+    } else {
+        "No upcoming events".to_owned()
+    };
+
+    bot.message(chat_id, msg)
+        .send()
+        .map(|_| ())
+        .map_err(|e| e.context(EventErrorKind::Telegram).into())
 }
 
 fn format_date<T>(localtime: DateTime<T>) -> String

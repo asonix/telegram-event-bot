@@ -63,6 +63,22 @@ impl ResponseType for AskEvents {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AskDeleteEvents(pub Vec<Event>, pub Integer);
+
+impl ResponseType for AskDeleteEvents {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventDeleted(pub Integer, pub Integer, pub String);
+
+impl ResponseType for EventDeleted {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IsAdmin(pub Integer, pub Vec<Integer>);
 
 impl ResponseType for IsAdmin {
@@ -98,6 +114,14 @@ impl ResponseType for CreatedChannel {
 pub struct SendUrl(pub Integer, pub String, pub String);
 
 impl ResponseType for SendUrl {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SendEvents(pub Integer, pub Vec<Event>);
+
+impl ResponseType for SendEvents {
     type Item = ();
     type Error = ();
 }

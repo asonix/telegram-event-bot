@@ -10,13 +10,14 @@ use serde_json;
 
 use ENCODING_ALPHABET;
 use actors::db_actor::messages::{StoreEditEventLink, StoreEventLink};
-use actors::db_actor::messages::{DeleteUserByUserId, LookupEvent, LookupEventsByUserId,
+use actors::db_actor::messages::{DeleteEvent, DeleteUserByUserId, LookupEvent,
+                                 LookupEventsByChatId, LookupEventsByUserId, LookupSystem,
                                  LookupSystemByChannel, LookupUser, NewChannel, NewChat,
                                  NewRelation, NewUser, RemoveUserChat};
 use actors::db_broker::DbBroker;
 use actors::telegram_actor::{CallbackQueryMessage, TelegramActor};
-use actors::telegram_actor::messages::{AskChats, AskEvents, CreatedChannel, IsAdmin, Linked,
-                                       PrintId, SendUrl};
+use actors::telegram_actor::messages::{AskChats, AskDeleteEvents, AskEvents, CreatedChannel,
+                                       EventDeleted, IsAdmin, Linked, PrintId, SendEvents, SendUrl};
 use actors::users_actor::{DeleteState, UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
 use error::EventErrorKind;
@@ -163,6 +164,21 @@ impl TelegramMessageActor {
                                 .map_err(|e| error!("Error: {:?}", e)),
                         );
                     }
+                } else if text.starts_with("/delete") {
+                    debug!("delete");
+                    if message.chat.kind == "private" {
+                        debug!("private");
+                        let tg = self.tg.clone();
+                        let chat_id = message.chat.id;
+
+                        Arbiter::handle().spawn(
+                            self.db
+                                .call_fut(LookupEventsByUserId { user_id: user.id })
+                                .then(flatten::<LookupEventsByUserId>)
+                                .map(move |events| tg.send(AskDeleteEvents(events, chat_id)))
+                                .map_err(|e| error!("Error: {:?}", e)),
+                        );
+                    }
                 } else if text.starts_with("/id") {
                     debug!("id");
                     if message.chat.kind == "group" || message.chat.kind == "supergroup" {
@@ -170,6 +186,24 @@ impl TelegramMessageActor {
                         let chat_id = message.chat.id;
 
                         self.tg.send(PrintId(chat_id));
+                    }
+                } else if text.starts_with("/events") {
+                    debug!("events");
+                    if message.chat.kind == "group" || message.chat.kind == "supergroup" {
+                        debug!("group | supergroup");
+                        let tg = self.tg.clone();
+
+                        let chat_id = message.chat.id;
+
+                        Arbiter::handle().spawn(
+                            self.db
+                                .call_fut(LookupEventsByChatId { chat_id })
+                                .then(flatten::<LookupEventsByChatId>)
+                                .map(move |events| {
+                                    tg.send(SendEvents(chat_id, events));
+                                })
+                                .map_err(|e| error!("Error: {:?}", e)),
+                        )
                     }
                 } else {
                     debug!("else");
@@ -385,6 +419,27 @@ impl TelegramMessageActor {
                                             .map_err(|e| error!("Error: {:?}", e)),
                                     );
                                 }
+                                CallbackQueryMessage::DeleteEvent {
+                                    event_id,
+                                    system_id,
+                                    title,
+                                } => Arbiter::handle().spawn(
+                                    self.db
+                                        .call_fut(DeleteEvent { event_id })
+                                        .then(flatten::<DeleteEvent>)
+                                        .and_then(move |_| {
+                                            db.call_fut(LookupSystem { system_id })
+                                                .then(flatten::<LookupSystem>)
+                                        })
+                                        .map(move |chat_system| {
+                                            tg.send(EventDeleted(
+                                                chat_id,
+                                                chat_system.events_channel(),
+                                                title,
+                                            ))
+                                        })
+                                        .map_err(|e| error!("Error: {:?}", e)),
+                                ),
                             }
                         }
                     }

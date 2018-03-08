@@ -82,6 +82,14 @@ impl Handler<EditEvent> for DbActor {
     }
 }
 
+impl Handler<LookupEventsByChatId> for DbActor {
+    type Result = ResponseFuture<Self, LookupEventsByChatId>;
+
+    fn handle(&mut self, msg: LookupEventsByChatId, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_events_by_chat_id(msg.chat_id))
+    }
+}
+
 impl Handler<LookupEvent> for DbActor {
     type Result = ResponseFuture<Self, LookupEvent>;
 

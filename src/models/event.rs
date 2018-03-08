@@ -470,7 +470,7 @@ impl Event {
                             title: row.get(3),
                             description: row.get(4),
                             hosts: host.into_iter().collect(),
-                            system_id: row.get(8),
+                            system_id: row.get(9),
                         })
                     })
                     .collect()

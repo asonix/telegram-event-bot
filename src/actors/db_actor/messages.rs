@@ -96,6 +96,16 @@ impl ResponseType for EditEvent {
     type Error = EventError;
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct LookupEventsByChatId {
+    pub chat_id: Integer,
+}
+
+impl ResponseType for LookupEventsByChatId {
+    type Item = Vec<Event>;
+    type Error = EventError;
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct LookupEvent {
     pub event_id: i32,

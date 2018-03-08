@@ -222,6 +222,17 @@ impl DbActor {
             })
     }
 
+    fn get_events_by_chat_id(
+        &mut self,
+        chat_id: Integer,
+    ) -> impl Future<Item = (Vec<Event>, Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| Event::by_chat_id(chat_id, connection).map_err(Ok))
+    }
+
     fn get_events_in_range(
         &mut self,
         start_date: DateTime<Tz>,

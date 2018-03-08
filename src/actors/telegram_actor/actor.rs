@@ -64,6 +64,22 @@ impl Handler<AskEvents> for TelegramActor {
     }
 }
 
+impl Handler<AskDeleteEvents> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: AskDeleteEvents, _: &mut Self::Context) -> Self::Result {
+        self.ask_delete_events(msg.0, msg.1)
+    }
+}
+
+impl Handler<EventDeleted> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: EventDeleted, _: &mut Self::Context) -> Self::Result {
+        self.event_deleted(msg.0, msg.1, msg.2);
+    }
+}
+
 impl Handler<IsAdmin> for TelegramActor {
     type Result = ResponseFuture<Self, IsAdmin>;
 
@@ -101,5 +117,13 @@ impl Handler<SendUrl> for TelegramActor {
 
     fn handle(&mut self, msg: SendUrl, _: &mut Self::Context) -> Self::Result {
         self.send_url(msg.0, msg.1, msg.2)
+    }
+}
+
+impl Handler<SendEvents> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendEvents, _: &mut Self::Context) -> Self::Result {
+        self.send_events(msg.0, msg.1);
     }
 }
