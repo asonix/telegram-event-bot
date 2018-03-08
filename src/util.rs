@@ -22,6 +22,10 @@ pub fn delete_error((error, connection): (TpError, Connection)) -> (EventError, 
     (error.context(EventErrorKind::Delete).into(), connection)
 }
 
+pub fn update_error((error, connection): (TpError, Connection)) -> (EventError, Connection) {
+    (error.context(EventErrorKind::Update).into(), connection)
+}
+
 pub fn transaction_error((error, connection): (TpError, Connection)) -> (EventError, Connection) {
     (
         error.context(EventErrorKind::Transaction).into(),

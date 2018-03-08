@@ -68,6 +68,7 @@ impl User {
             .join(", ");
 
         let full_sql = format!("{} ({})", sql, values);
+        debug!("{}", full_sql);
 
         connection
             .prepare(&full_sql)
@@ -102,6 +103,7 @@ impl User {
             .join(", ");
 
         let full_sql = format!("{} ({})", sql, values);
+        debug!("{}", full_sql);
 
         connection
             .prepare(&full_sql)
@@ -134,6 +136,7 @@ impl User {
                     FROM users AS usr
                     INNER JOIN user_chats AS uc ON uc.users_id = usr.id
                     INNER JOIN chats AS ch ON uc.chats_id = ch.id";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -161,6 +164,7 @@ impl User {
         connection: Connection,
     ) -> impl Future<Item = ((), Connection), Error = (EventError, Connection)> {
         let sql = "DELETE FROM users AS usr WHERE usr.user_id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -182,6 +186,7 @@ impl User {
         connection: Connection,
     ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         let sql = "DELETE FROM users AS usr WHERE usr.id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -204,6 +209,7 @@ impl User {
         let sql = "DELETE FROM user_chats AS uc
                     USING users AS usr, chats AS ch
                     WHERE uc.users_id = usr.id AND uc.chats_id = ch.id AND usr.user_id = $1 AND ch.chat_id = $2";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -277,6 +283,7 @@ impl CreateUser {
             .transaction()
             .map_err(transaction_error)
             .and_then(move |transaction| {
+                debug!("{}", sql);
                 transaction
                     .prepare(sql)
                     .map_err(transaction_prepare_error)
@@ -300,6 +307,7 @@ impl CreateUser {
                     })
                     .and_then(move |(user, transaction)| {
                         let users_id = user.id();
+                        debug!("{}", join_sql);
                         transaction
                             .prepare(join_sql)
                             .map_err(transaction_prepare_error)

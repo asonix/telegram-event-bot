@@ -50,6 +50,7 @@ pub enum FrontendErrorKind {
     #[fail(display = "Invalid second")] BadSecond,
     #[fail(display = "Could not find requested route")] NoRoute,
     #[fail(display = "Could not interact with session")] Session,
+    #[fail(display = "Message from backend canceled")] Canceled,
 }
 
 impl From<FrontendErrorKind> for FrontendError {

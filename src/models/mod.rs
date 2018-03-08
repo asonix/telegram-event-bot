@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod chat_system;
+pub mod edit_event_link;
 pub mod event;
 pub mod new_event_link;
 pub mod user;

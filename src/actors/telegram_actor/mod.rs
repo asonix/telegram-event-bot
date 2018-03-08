@@ -6,6 +6,7 @@ use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
 use chrono_tz::US::Central;
 use futures::{Future, Stream};
 use futures::stream::iter_ok;
+use serde_json;
 use telebot::RcBot;
 use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage};
 use telebot::objects::{InlineKeyboardButton, InlineKeyboardMarkup, Integer};
@@ -19,6 +20,12 @@ use util::flatten;
 
 mod actor;
 pub mod messages;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum CallbackQueryMessage {
+    NewEvent { channel_id: Integer },
+    EditEvent { event_id: i32 },
+}
 
 pub struct TelegramActor {
     bot: RcBot,
@@ -137,6 +144,38 @@ impl TelegramActor {
         self.bot.inner.handle.spawn(fut);
     }
 
+    fn update_event(&self, event: Event) {
+        let localtime = event.start_date().with_timezone(&Central);
+        let when = format_date(localtime);
+
+        let length = format_duration(&event);
+
+        let bot = self.bot.clone();
+
+        let fut = self.db
+            .call_fut(GetChatSystemByEventId {
+                event_id: event.id(),
+            })
+            .then(flatten::<GetChatSystemByEventId>)
+            .and_then(move |chat_system| {
+                bot.message(
+                    chat_system.events_channel(),
+                    format!(
+                        "Event Updated!\n{}\nWhen: {}\nDuration: {}\nDescription: {}",
+                        event.title(),
+                        when,
+                        length,
+                        event.description(),
+                    ),
+                ).send()
+                    .map_err(|e| e.context(EventErrorKind::Telegram).into())
+            })
+            .map(|_| ())
+            .map_err(|e| error!("Error: {:?}", e));
+
+        self.bot.inner.handle.spawn(fut);
+    }
+
     fn query_events(&self, event_id: i32, system_id: i32) {
         let db = self.db.clone();
         let bot = self.bot.clone();
@@ -200,29 +239,61 @@ impl TelegramActor {
             .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
     }
 
-    fn ask_chats(&self, chats: HashSet<Integer>, chat_id: Integer) {
+    fn ask_chats(&self, channels: HashSet<Integer>, chat_id: Integer) {
         let bot = self.bot.clone();
         let bot2 = bot.clone();
 
-        let fut = iter_ok(chats)
-            .and_then(move |chat_id| {
+        let fut = iter_ok(channels)
+            .and_then(move |channel_id| {
                 bot.clone()
-                    .get_chat(chat_id)
+                    .get_chat(channel_id)
                     .send()
                     .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
             })
-            .map(|(_, chat)| {
+            .map(move |(_, channel)| {
+                debug!("Asking about channel_id: {}", channel.id);
                 InlineKeyboardButton::new(
-                    chat.title
-                        .unwrap_or(chat.username.unwrap_or("No title".to_owned())),
-                ).callback_data(format!("{}", chat.id))
+                    channel
+                        .title
+                        .unwrap_or(channel.username.unwrap_or("No title".to_owned())),
+                ).callback_data(
+                    serde_json::to_string(&CallbackQueryMessage::NewEvent {
+                        channel_id: channel.id,
+                    }).unwrap(),
+                )
             })
             .collect()
             .and_then(move |buttons| {
                 bot2.message(
                     chat_id,
-                    "Which chat would you like to create an event for?".to_owned(),
+                    "Which channel would you like to create an event for?".to_owned(),
                 ).reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                    .send()
+                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
+            });
+
+        self.bot
+            .inner
+            .handle
+            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+    }
+
+    fn ask_events(&self, events: Vec<Event>, chat_id: Integer) {
+        let bot = self.bot.clone();
+        let bot2 = bot.clone();
+
+        let fut = iter_ok(events)
+            .map(|event| {
+                InlineKeyboardButton::new(event.title().to_owned()).callback_data(
+                    serde_json::to_string(&CallbackQueryMessage::EditEvent {
+                        event_id: event.id(),
+                    }).unwrap(),
+                )
+            })
+            .collect()
+            .and_then(move |buttons| {
+                bot2.message(chat_id, "Which event would you like to edit?".to_owned())
+                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
                     .send()
                     .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
             });
@@ -309,12 +380,12 @@ impl TelegramActor {
         );
     }
 
-    fn send_url(&mut self, chat_id: Integer, url: String) {
+    fn send_url(&mut self, chat_id: Integer, action: String, url: String) {
         self.bot.inner.handle.spawn(
             self.bot
                 .message(
                     chat_id,
-                    format!("Use this link to create your event: {}", url),
+                    format!("Use this link to {} your event: {}", action, url),
                 )
                 .send()
                 .map(|_| ())

@@ -39,9 +39,25 @@ impl ResponseType for NewEvent {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpdateEvent(pub Event);
+
+impl ResponseType for UpdateEvent {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AskChats(pub HashSet<Integer>, pub Integer);
 
 impl ResponseType for AskChats {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AskEvents(pub Vec<Event>, pub Integer);
+
+impl ResponseType for AskEvents {
     type Item = ();
     type Error = ();
 }
@@ -79,7 +95,7 @@ impl ResponseType for CreatedChannel {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SendUrl(pub Integer, pub String);
+pub struct SendUrl(pub Integer, pub String, pub String);
 
 impl ResponseType for SendUrl {
     type Item = ();

@@ -16,6 +16,14 @@ impl Handler<NewEvent> for TelegramActor {
     }
 }
 
+impl Handler<UpdateEvent> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: UpdateEvent, _: &mut Self::Context) -> Self::Result {
+        self.update_event(msg.0);
+    }
+}
+
 impl Handler<EventSoon> for TelegramActor {
     type Result = ();
 
@@ -45,6 +53,14 @@ impl Handler<AskChats> for TelegramActor {
 
     fn handle(&mut self, msg: AskChats, _: &mut Self::Context) -> Self::Result {
         self.ask_chats(msg.0, msg.1)
+    }
+}
+
+impl Handler<AskEvents> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: AskEvents, _: &mut Self::Context) -> Self::Result {
+        self.ask_events(msg.0, msg.1)
     }
 }
 
@@ -84,6 +100,6 @@ impl Handler<SendUrl> for TelegramActor {
     type Result = ();
 
     fn handle(&mut self, msg: SendUrl, _: &mut Self::Context) -> Self::Result {
-        self.send_url(msg.0, msg.1)
+        self.send_url(msg.0, msg.1, msg.2)
     }
 }

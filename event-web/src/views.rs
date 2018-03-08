@@ -13,12 +13,13 @@ pub fn form(
     minutes: Vec<u32>,
     timezones: Vec<&'static str>,
     id: String,
+    heading_text: &str,
 ) -> Markup {
     html! {
         (DOCTYPE)
         html {
             head {
-                title "EventBot | New Event";
+                title (heading_text);
                 link href="/assets/styles.css" rel="stylesheet" type="text/css";
             }
             body {
@@ -259,13 +260,13 @@ pub fn form(
     }
 }
 
-pub fn success(event: Event) -> Markup {
+pub fn success(event: Event, title: &str) -> Markup {
     html! {
         (DOCTYPE)
         html {
             head {
                 title {
-                    "EventBot | Event Created"
+                    (title)
                 }
                 link href="/assets/styles.css" rel="stylesheet" type="text/css";
             }
@@ -282,10 +283,10 @@ pub fn success(event: Event) -> Markup {
                             (event.description())
                         }
                         p {
-                            "Start" (event.start_date().to_rfc2822())
+                            "Start: " (event.start_date().to_rfc2822())
                         }
                         p {
-                            "End" (event.end_date().to_rfc2822())
+                            "End: " (event.end_date().to_rfc2822())
                         }
                     }
                 }

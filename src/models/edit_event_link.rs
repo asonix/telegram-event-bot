@@ -6,14 +6,15 @@ use error::{EventError, EventErrorKind};
 use util::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NewEventLink {
+pub struct EditEventLink {
     id: i32,
     user_id: i32,
     system_id: i32,
+    event_id: i32,
     secret: String,
 }
 
-impl NewEventLink {
+impl EditEventLink {
     pub fn id(&self) -> i32 {
         self.id
     }
@@ -26,6 +27,10 @@ impl NewEventLink {
         self.system_id
     }
 
+    pub fn event_id(&self) -> i32 {
+        self.event_id
+    }
+
     pub fn secret(&self) -> &str {
         &self.secret
     }
@@ -33,10 +38,11 @@ impl NewEventLink {
     pub fn create(
         user_id: i32,
         system_id: i32,
+        event_id: i32,
         secret: String,
         connection: Connection,
     ) -> impl Future<Item = (Self, Connection), Error = (EventError, Connection)> {
-        let sql = "INSERT INTO new_event_links (users_id, system_id, secret) VALUES ($1, $2, $3) RETURNING id";
+        let sql = "INSERT INTO edit_event_links (users_id, system_id, events_id, secret) VALUES ($1, $2, $3, $4) RETURNING id";
         debug!("{}", sql);
 
         connection
@@ -44,18 +50,19 @@ impl NewEventLink {
             .map_err(prepare_error)
             .and_then(move |(s, connection)| {
                 connection
-                    .query(&s, &[&user_id, &system_id, &secret])
-                    .map(move |row| NewEventLink {
+                    .query(&s, &[&user_id, &system_id, &event_id, &secret])
+                    .map(move |row| EditEventLink {
                         id: row.get(0),
-                        user_id: user_id,
-                        system_id: system_id,
+                        user_id,
+                        system_id,
+                        event_id,
                         secret: secret.clone(),
                     })
                     .collect()
                     .map_err(insert_error)
-                    .and_then(|(mut nels, connection)| {
-                        if nels.len() > 0 {
-                            Ok((nels.remove(0), connection))
+                    .and_then(|(mut eels, connection)| {
+                        if eels.len() > 0 {
+                            Ok((eels.remove(0), connection))
                         } else {
                             Err((EventErrorKind::Insert.into(), connection))
                         }
@@ -63,13 +70,13 @@ impl NewEventLink {
             })
     }
 
-    pub fn by_user_id(
-        user_id: i32,
+    pub fn by_event_id(
+        event_id: i32,
         connection: Connection,
     ) -> impl Future<Item = (Self, Connection), Error = (EventError, Connection)> {
-        let sql = "SELECT nel.id, nel.users_id, nel.system_id, nel.secret
-                    FROM new_event_links AS nel
-                    WHERE nel.users_id = $1 AND nel.used = FALSE";
+        let sql = "SELECT eel.id, eel.users_id, eel.system_id, eel.events_id, eel.secret
+                    FROM edit_event_links AS eel
+                    WHERE eel.events_id = $1 AND eel.used = FALSE";
         debug!("{}", sql);
 
         connection
@@ -77,18 +84,19 @@ impl NewEventLink {
             .map_err(prepare_error)
             .and_then(move |(s, connection)| {
                 connection
-                    .query(&s, &[&user_id])
-                    .map(|row| NewEventLink {
+                    .query(&s, &[&event_id])
+                    .map(|row| EditEventLink {
                         id: row.get(0),
                         user_id: row.get(1),
                         system_id: row.get(2),
-                        secret: row.get(3),
+                        event_id: row.get(3),
+                        secret: row.get(4),
                     })
                     .collect()
                     .map_err(lookup_error)
-                    .and_then(|(mut nels, connection)| {
-                        if nels.len() > 0 {
-                            Ok((nels.remove(0), connection))
+                    .and_then(|(mut eels, connection)| {
+                        if eels.len() > 0 {
+                            Ok((eels.remove(0), connection))
                         } else {
                             Err((EventErrorKind::Lookup.into(), connection))
                         }
@@ -100,7 +108,7 @@ impl NewEventLink {
         id: i32,
         connection: Connection,
     ) -> impl Future<Item = Connection, Error = (EventError, Connection)> {
-        let sql = "UPDATE new_event_links SET used = TRUE WHERE id = $1";
+        let sql = "UPDATE edit_event_links SET used = TRUE WHERE id = $1";
         debug!("{}", sql);
 
         connection

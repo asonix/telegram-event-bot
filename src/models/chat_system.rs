@@ -45,6 +45,7 @@ impl ChatSystem {
         connection: Connection,
     ) -> impl Future<Item = (Self, Connection), Error = (EventError, Connection)> {
         let sql = "INSERT INTO chat_systems (events_channel) VALUES ($1) RETURNING id";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -76,6 +77,7 @@ impl ChatSystem {
         let sql = "SELECT sys.id, sys.events_channel
                     FROM chat_systems AS sys
                     WHERE sys.id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -105,6 +107,7 @@ impl ChatSystem {
         connection: Connection,
     ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         let sql = "DELETE FROM chat_systems AS sys WHERE sys.id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -129,6 +132,7 @@ impl ChatSystem {
                     FROM chat_systems AS sys
                     LEFT JOIN events AS ev ON ev.system_id = sys.id
                     WHERE ev.id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -160,6 +164,7 @@ impl ChatSystem {
         let sql = "SELECT sys.id
                     FROM chat_systems AS sys
                     WHERE sys.events_channel = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -195,6 +200,7 @@ impl ChatSystem {
                     INNER JOIN user_chats AS usch ON usch.chats_id = ch.id
                     INNER JOIN users AS usr ON usch.users_id = usr.id
                     WHERE usr.user_id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -218,6 +224,7 @@ impl ChatSystem {
         let sql = "SELECT sys.id, sys.events_channel, ch.id, ch.chat_id
             FROM chats AS ch
             INNER JOIN chat_systems AS sys ON ch.system_id = sys.id";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -259,6 +266,7 @@ impl ChatSystem {
                     LEFT JOIN users AS usr ON h.users_id = usr.id
                     WHERE ch.chat_id = $1
                     ORDER BY ev.start_date, ev.id";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)

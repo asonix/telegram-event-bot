@@ -6,6 +6,7 @@ use telebot::objects::Integer;
 use error::EventError;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;
+use models::edit_event_link::EditEventLink;
 use models::event::Event;
 use models::new_event_link::NewEventLink;
 use models::user::User;
@@ -64,7 +65,7 @@ impl ResponseType for DeleteChannel {
     type Error = EventError;
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewEvent {
     pub system_id: i32,
     pub title: String,
@@ -76,6 +77,42 @@ pub struct NewEvent {
 
 impl ResponseType for NewEvent {
     type Item = Event;
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EditEvent {
+    pub id: i32,
+    pub system_id: i32,
+    pub title: String,
+    pub description: String,
+    pub start_date: DateTime<Tz>,
+    pub end_date: DateTime<Tz>,
+    pub hosts: Vec<i32>,
+}
+
+impl ResponseType for EditEvent {
+    type Item = Event;
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct LookupEvent {
+    pub event_id: i32,
+}
+
+impl ResponseType for LookupEvent {
+    type Item = Event;
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct LookupEventsByUserId {
+    pub user_id: Integer,
+}
+
+impl ResponseType for LookupEventsByUserId {
+    type Item = Vec<Event>;
     type Error = EventError;
 }
 
@@ -155,6 +192,39 @@ impl ResponseType for GetUsersWithChats {
 }
 
 #[derive(Clone, Debug)]
+pub struct StoreEditEventLink {
+    pub user_id: i32,
+    pub event_id: i32,
+    pub system_id: i32,
+    pub secret: String,
+}
+
+impl ResponseType for StoreEditEventLink {
+    type Item = EditEventLink;
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct EditEventLinkByEventId {
+    pub event_id: i32,
+}
+
+impl ResponseType for EditEventLinkByEventId {
+    type Item = EditEventLink;
+    type Error = EventError;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DeleteEditEventLink {
+    pub id: i32,
+}
+
+impl ResponseType for DeleteEditEventLink {
+    type Item = ();
+    type Error = EventError;
+}
+
+#[derive(Clone, Debug)]
 pub struct StoreEventLink {
     pub user_id: i32,
     pub system_id: i32,
@@ -165,7 +235,6 @@ impl ResponseType for StoreEventLink {
     type Item = NewEventLink;
     type Error = EventError;
 }
-
 #[derive(Clone, Copy, Debug)]
 pub struct EventLinkByUserId {
     pub user_id: i32,

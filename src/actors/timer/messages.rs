@@ -38,3 +38,12 @@ impl ResponseType for MigrateError {
     type Item = ();
     type Error = ();
 }
+
+pub struct UpdateEvent {
+    pub event: Event,
+}
+
+impl ResponseType for UpdateEvent {
+    type Item = ();
+    type Error = ();
+}

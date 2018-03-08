@@ -6,14 +6,17 @@ use base_x::encode;
 use event_web::generate_secret;
 use rand::Rng;
 use rand::os::OsRng;
+use serde_json;
 
 use ENCODING_ALPHABET;
-use actors::db_actor::messages::StoreEventLink;
-use actors::db_actor::messages::{DeleteUserByUserId, LookupSystemByChannel, LookupUser,
-                                 NewChannel, NewChat, NewRelation, NewUser, RemoveUserChat};
+use actors::db_actor::messages::{StoreEditEventLink, StoreEventLink};
+use actors::db_actor::messages::{DeleteUserByUserId, LookupEvent, LookupEventsByUserId,
+                                 LookupSystemByChannel, LookupUser, NewChannel, NewChat,
+                                 NewRelation, NewUser, RemoveUserChat};
 use actors::db_broker::DbBroker;
-use actors::telegram_actor::TelegramActor;
-use actors::telegram_actor::messages::{AskChats, CreatedChannel, IsAdmin, Linked, PrintId, SendUrl};
+use actors::telegram_actor::{CallbackQueryMessage, TelegramActor};
+use actors::telegram_actor::messages::{AskChats, AskEvents, CreatedChannel, IsAdmin, Linked,
+                                       PrintId, SendUrl};
 use actors::users_actor::{DeleteState, UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
 use error::EventErrorKind;
@@ -50,7 +53,7 @@ impl TelegramMessageActor {
     }
 
     fn handle_update(&self, update: Update) {
-        debug!("handle update");
+        debug!("handle update: {}", update.update_id);
         if let Some(msg) = update.message {
             self.handle_message(msg);
         } else if let Some(channel_post) = update.channel_post {
@@ -142,6 +145,21 @@ impl TelegramMessageActor {
                                 .call_fut(LookupChannels(user.id))
                                 .then(flatten::<LookupChannels>)
                                 .map(move |chats| tg.send(AskChats(chats, chat_id)))
+                                .map_err(|e| error!("Error: {:?}", e)),
+                        );
+                    }
+                } else if text.starts_with("/edit") {
+                    debug!("edit");
+                    if message.chat.kind == "private" {
+                        debug!("private");
+                        let tg = self.tg.clone();
+                        let chat_id = message.chat.id;
+
+                        Arbiter::handle().spawn(
+                            self.db
+                                .call_fut(LookupEventsByUserId { user_id: user.id })
+                                .then(flatten::<LookupEventsByUserId>)
+                                .map(move |events| tg.send(AskEvents(events, chat_id)))
                                 .map_err(|e| error!("Error: {:?}", e)),
                         );
                     }
@@ -259,7 +277,7 @@ impl TelegramMessageActor {
             let chat_id = msg.chat.id;
 
             if let Some(data) = callback_query.data {
-                if let Ok(channel_id) = data.parse::<Integer>() {
+                if let Ok(query_data) = serde_json::from_str::<CallbackQueryMessage>(&data) {
                     if let Ok(mut rng) = OsRng::new() {
                         let mut bytes = [0; 8];
 
@@ -273,45 +291,101 @@ impl TelegramMessageActor {
                             let users = self.users.clone();
 
                             let url = self.url.clone();
-
-                            Arbiter::handle().spawn(
-                                self.db
-                                    .call_fut(LookupUser(user_id))
-                                    .then(flatten::<LookupUser>)
-                                    .and_then(move |user| {
-                                        db.call_fut(LookupSystemByChannel(channel_id))
-                                            .then(flatten::<LookupSystemByChannel>)
-                                            .map(|chat_system| (chat_system, user))
-                                    })
-                                    .and_then(move |(chat_system, user)| {
-                                        let events_channel = chat_system.events_channel();
-                                        users
-                                            .call_fut(LookupChannels(user.user_id()))
-                                            .then(flatten::<LookupChannels>)
-                                            .and_then(move |channel_ids| {
-                                                if channel_ids.contains(&events_channel) {
-                                                    Ok(())
+                            match query_data {
+                                CallbackQueryMessage::NewEvent { channel_id } => {
+                                    debug!("channel_id: {}", channel_id);
+                                    Arbiter::handle().spawn(
+                                        self.db
+                                            .call_fut(LookupUser(user_id))
+                                            .then(flatten::<LookupUser>)
+                                            .and_then(move |user| {
+                                                db.call_fut(LookupSystemByChannel(channel_id))
+                                                    .then(flatten::<LookupSystemByChannel>)
+                                                    .map(|chat_system| (chat_system, user))
+                                            })
+                                            .and_then(move |(chat_system, user)| {
+                                                let events_channel = chat_system.events_channel();
+                                                users
+                                                    .call_fut(LookupChannels(user.user_id()))
+                                                    .then(flatten::<LookupChannels>)
+                                                    .and_then(move |channel_ids| {
+                                                        if channel_ids.contains(&events_channel) {
+                                                            Ok(())
+                                                        } else {
+                                                            Err(EventErrorKind::Permissions.into())
+                                                        }
+                                                    })
+                                                    .and_then(move |_| {
+                                                        db2.call_fut(StoreEventLink {
+                                                            user_id: user.id(),
+                                                            system_id: chat_system.id(),
+                                                            secret,
+                                                        }).then(flatten::<StoreEventLink>)
+                                                            .map(move |_| user)
+                                                    })
+                                            })
+                                            .map(move |user| {
+                                                tg.send(SendUrl(
+                                                    chat_id,
+                                                    "create".to_owned(),
+                                                    format!(
+                                                        "{}/events/new/{}={}",
+                                                        url,
+                                                        base64d,
+                                                        user.id()
+                                                    ),
+                                                ))
+                                            })
+                                            .map_err(|e| error!("Error: {:?}", e)),
+                                    );
+                                }
+                                CallbackQueryMessage::EditEvent { event_id } => {
+                                    Arbiter::handle().spawn(
+                                        self.db
+                                            .call_fut(LookupEvent { event_id })
+                                            .then(flatten::<LookupEvent>)
+                                            .and_then(move |event| {
+                                                if event
+                                                    .hosts()
+                                                    .iter()
+                                                    .any(|host| host.user_id() == user_id)
+                                                {
+                                                    Ok(event)
                                                 } else {
-                                                    Err(EventErrorKind::Permissions.into())
+                                                    Err(EventErrorKind::Lookup.into())
                                                 }
                                             })
-                                            .and_then(move |_| {
-                                                db2.call_fut(StoreEventLink {
-                                                    user_id: user.id(),
-                                                    system_id: chat_system.id(),
+                                            .and_then(move |event| {
+                                                let e2 = event.clone();
+                                                let host = e2.hosts()
+                                                    .iter()
+                                                    .find(|host| host.user_id() == user_id)
+                                                    .unwrap();
+
+                                                db2.call_fut(StoreEditEventLink {
+                                                    user_id: host.id(),
+                                                    system_id: event.system_id(),
+                                                    event_id: event.id(),
                                                     secret,
-                                                }).then(flatten::<StoreEventLink>)
-                                                    .map(move |_| user)
+                                                }).then(flatten::<StoreEditEventLink>)
+                                                    .map(move |_| event)
                                             })
-                                    })
-                                    .map(move |user| {
-                                        tg.send(SendUrl(
-                                            chat_id,
-                                            format!("{}/events/new/{}={}", url, base64d, user.id()),
-                                        ))
-                                    })
-                                    .map_err(|e| error!("Error: {:?}", e)),
-                            );
+                                            .map(move |event| {
+                                                tg.send(SendUrl(
+                                                    chat_id,
+                                                    "update".to_owned(),
+                                                    format!(
+                                                        "{}/events/edit/{}={}",
+                                                        url,
+                                                        base64d,
+                                                        event.id()
+                                                    ),
+                                                ))
+                                            })
+                                            .map_err(|e| error!("Error: {:?}", e)),
+                                    );
+                                }
+                            }
                         }
                     }
                 }

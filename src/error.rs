@@ -49,6 +49,7 @@ pub enum EventErrorKind {
     #[fail(display = "Failed to prepare db query")] Prepare,
     #[fail(display = "Failed to insert item")] Insert,
     #[fail(display = "Failed to delete item")] Delete,
+    #[fail(display = "Failed to update item")] Update,
     #[fail(display = "Failed to commit transaction")] Commit,
     #[fail(display = "Failed to create transaction")] Transaction,
     #[fail(display = "No hosts present")] Hosts,

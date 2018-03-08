@@ -66,6 +66,38 @@ impl Handler<NewEvent> for DbActor {
     }
 }
 
+impl Handler<EditEvent> for DbActor {
+    type Result = ResponseFuture<Self, EditEvent>;
+
+    fn handle(&mut self, msg: EditEvent, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.edit_event(
+            msg.id,
+            msg.system_id,
+            msg.title,
+            msg.description,
+            msg.start_date,
+            msg.end_date,
+            msg.hosts,
+        ))
+    }
+}
+
+impl Handler<LookupEvent> for DbActor {
+    type Result = ResponseFuture<Self, LookupEvent>;
+
+    fn handle(&mut self, msg: LookupEvent, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.lookup_event(msg.event_id))
+    }
+}
+
+impl Handler<LookupEventsByUserId> for DbActor {
+    type Result = ResponseFuture<Self, LookupEventsByUserId>;
+
+    fn handle(&mut self, msg: LookupEventsByUserId, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.lookup_events_by_user_id(msg.user_id))
+    }
+}
+
 impl Handler<DeleteEvent> for DbActor {
     type Result = ResponseFuture<Self, DeleteEvent>;
 
@@ -119,6 +151,35 @@ impl Handler<GetUsersWithChats> for DbActor {
 
     fn handle(&mut self, _: GetUsersWithChats, _: &mut Self::Context) -> Self::Result {
         DbActor::wrap_fut(self.get_users_with_chats())
+    }
+}
+
+impl Handler<StoreEditEventLink> for DbActor {
+    type Result = ResponseFuture<Self, StoreEditEventLink>;
+
+    fn handle(&mut self, msg: StoreEditEventLink, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.store_edit_event_link(
+            msg.user_id,
+            msg.system_id,
+            msg.event_id,
+            msg.secret,
+        ))
+    }
+}
+
+impl Handler<EditEventLinkByEventId> for DbActor {
+    type Result = ResponseFuture<Self, EditEventLinkByEventId>;
+
+    fn handle(&mut self, msg: EditEventLinkByEventId, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_edit_event_link_by_event_id(msg.event_id))
+    }
+}
+
+impl Handler<DeleteEditEventLink> for DbActor {
+    type Result = ResponseFuture<Self, DeleteEditEventLink>;
+
+    fn handle(&mut self, msg: DeleteEditEventLink, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.delete_edit_event_link(msg.id))
     }
 }
 

@@ -15,6 +15,10 @@ extern crate futures_state_stream;
 #[macro_use]
 extern crate log;
 extern crate rand;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 extern crate telebot;
 extern crate time;
 extern crate tokio_core;

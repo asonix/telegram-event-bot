@@ -92,3 +92,11 @@ impl Handler<Events> for Timer {
         self.handle_events(msg.events);
     }
 }
+
+impl Handler<UpdateEvent> for Timer {
+    type Result = ();
+
+    fn handle(&mut self, msg: UpdateEvent, _: &mut Self::Context) -> Self::Result {
+        self.update_event(msg.event);
+    }
+}

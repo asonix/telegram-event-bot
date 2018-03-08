@@ -45,6 +45,7 @@ impl Chat {
         connection: Connection,
     ) -> impl Future<Item = (Chat, Connection), Error = (EventError, Connection)> {
         let sql = "SELECT id FROM chats AS ch WHERE ch.chat_id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -90,6 +91,7 @@ impl Chat {
         connection: Connection,
     ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         let sql = "DELETE FROM chats AS ch WHERE ch.id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -116,6 +118,7 @@ impl CreateChat {
         connection: Connection,
     ) -> impl Future<Item = (Chat, Connection), Error = (EventError, Connection)> {
         let sql = "INSERT INTO chats (chat_id, system_id) VALUES ($1, $2) RETURNING id";
+        debug!("{}", sql);
 
         let chat_id = self.chat_id;
         let system_id = chat_system.id();

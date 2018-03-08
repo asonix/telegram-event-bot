@@ -1,4 +1,5 @@
 #![feature(proc_macro)]
+#![feature(conservative_impl_trait)]
 
 extern crate actix;
 extern crate actix_web;
@@ -35,14 +36,14 @@ use views::{form, success};
 #[derive(Clone)]
 pub struct EventHandler<T>
 where
-    T: Actor + Handler<NewEvent> + Clone,
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
 {
     handler: SyncAddress<T>,
 }
 
 impl<T> EventHandler<T>
 where
-    T: Actor + Handler<NewEvent> + Clone,
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
 {
     pub fn new(handler: SyncAddress<T>) -> Self {
         EventHandler { handler }
@@ -51,6 +52,15 @@ where
     pub fn notify(&self, event: Event, id: String) {
         self.handler.send(NewEvent(event, id));
     }
+
+    fn request_event(&self, id: String) -> impl Future<Item = Event, Error = FrontendError> {
+        self.handler
+            .call_fut(LookupEvent(id))
+            .then(|msg_res| match msg_res {
+                Ok(res) => res,
+                Err(e) => Err(FrontendError::from(e.context(FrontendErrorKind::Canceled))),
+            })
+    }
 }
 
 pub struct NewEvent(pub Event, pub String);
@@ -58,6 +68,20 @@ pub struct NewEvent(pub Event, pub String);
 impl ResponseType for NewEvent {
     type Item = ();
     type Error = ();
+}
+
+pub struct EditEvent(pub Event, pub String);
+
+impl ResponseType for EditEvent {
+    type Item = ();
+    type Error = ();
+}
+
+pub struct LookupEvent(pub String);
+
+impl ResponseType for LookupEvent {
+    type Item = Event;
+    type Error = FrontendError;
 }
 
 pub fn generate_secret(id: &str) -> Result<String, FrontendError> {
@@ -72,17 +96,19 @@ pub fn verify_secret(id: &str, secret: &str) -> Result<bool, FrontendError> {
         .map_err(FrontendError::from)
 }
 
-fn load_form<T>(mut req: HttpRequest<EventHandler<T>>) -> Result<HttpResponse, FrontendError>
+fn load_form<T>(
+    mut req: HttpRequest<EventHandler<T>>,
+    form_event: Option<CreateEvent>,
+    form_id: String,
+    form_url: String,
+    form_title: &str,
+) -> Result<HttpResponse, FrontendError>
 where
-    T: Actor + Handler<NewEvent> + Clone,
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
 {
-    let id = req.match_info()["secret"].to_owned();
-
     let option_event: Option<OptionEvent> = req.session()
         .get("option_event")
         .map_err(|_| FrontendErrorKind::Session)?;
-
-    let submit_url = format!("/events/new/{}", id);
 
     let date = Utc::now().with_timezone(&Tz::US__Central);
 
@@ -110,7 +136,11 @@ where
     let hours = (0..24).collect::<Vec<_>>();
     let minutes = (0..60).collect::<Vec<_>>();
 
-    let mut create_event = CreateEvent::default_from(date);
+    let mut create_event = if let Some(ce) = form_event {
+        ce
+    } else {
+        CreateEvent::default_from(date)
+    };
 
     if let Some(ref o) = option_event {
         create_event.merge(o);
@@ -132,14 +162,15 @@ where
             form(
                 create_event,
                 option_event,
-                submit_url,
+                form_url,
                 years,
                 months,
                 days,
                 hours,
                 minutes,
                 timezones,
-                id,
+                form_id,
+                form_title,
             ).into_string(),
         )
         .context(FrontendErrorKind::Body)?)
@@ -147,17 +178,99 @@ where
 
 fn new_form<T>(mut req: HttpRequest<EventHandler<T>>) -> Result<HttpResponse, FrontendError>
 where
-    T: Actor + Handler<NewEvent> + Clone,
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
 {
     req.session().remove("option_event");
-    load_form(req)
+    let id = req.match_info()["secret"].to_owned();
+    let submit_url = format!("/events/new/{}", id);
+    load_form(req, None, id, submit_url, "Event Bot | New Event")
+}
+
+fn edit_form<T>(
+    req: HttpRequest<EventHandler<T>>,
+) -> Box<Future<Item = HttpResponse, Error = FrontendError>>
+where
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
+{
+    let event_handler = req.state().clone();
+    let id = req.match_info()["secret"].to_owned();
+    let submit_url = format!("/events/edit/{}", id);
+
+    Box::new(
+        event_handler
+            .request_event(id.clone())
+            .and_then(move |event| {
+                load_form(
+                    req,
+                    Some(event.into()),
+                    id,
+                    submit_url,
+                    "Event Bot | Edit Event",
+                )
+            }),
+    )
+}
+
+fn updated<T>(
+    mut req: HttpRequest<EventHandler<T>>,
+) -> Box<Future<Item = HttpResponse, Error = FrontendError>>
+where
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
+{
+    let event_handler = req.state().clone();
+    let id = req.match_info()["secret"].to_owned();
+
+    Box::new(
+        req.urlencoded()
+            .map_err(|e| e.context(FrontendErrorKind::MissingField).into())
+            .and_then(move |mut params| {
+                let option_event = OptionEvent::new(
+                    params.remove("title"),
+                    params.remove("description"),
+                    params.remove("start_year").and_then(|y| y.parse().ok()),
+                    params.remove("start_month").and_then(|m| m.parse().ok()),
+                    params.remove("start_day").and_then(|d| d.parse().ok()),
+                    params.remove("start_hour").and_then(|h| h.parse().ok()),
+                    params.remove("start_minute").and_then(|m| m.parse().ok()),
+                    params.remove("end_year").and_then(|y| y.parse().ok()),
+                    params.remove("end_month").and_then(|m| m.parse().ok()),
+                    params.remove("end_day").and_then(|d| d.parse().ok()),
+                    params.remove("end_hour").and_then(|h| h.parse().ok()),
+                    params.remove("end_minute").and_then(|m| m.parse().ok()),
+                    params.remove("timezone"),
+                );
+
+                req.session()
+                    .set("option_event", option_event)
+                    .map(move |_| req)
+                    .map_err(|_| FrontendErrorKind::Session.into())
+            })
+            .and_then(move |mut req| {
+                Event::from_option(req.session().get("option_event").unwrap_or(None))
+                    .and_then(|event| {
+                        event_handler.handler.send(EditEvent(event.clone(), id));
+
+                        HTTPCreated
+                            .build()
+                            .header(header::CONTENT_TYPE, "text/html")
+                            .body(success(event, "Event Bot | Updated Event").into_string())
+                            .context(FrontendErrorKind::Body)
+                            .map_err(FrontendError::from)
+                    })
+                    .or_else(move |_| {
+                        let id = req.match_info()["secret"].to_owned();
+                        let submit_url = format!("/events/edit/{}", id);
+                        load_form(req, None, id, submit_url, "Event Bot | Edit Event")
+                    })
+            }),
+    )
 }
 
 fn submitted<T>(
     mut req: HttpRequest<EventHandler<T>>,
 ) -> Box<Future<Item = HttpResponse, Error = FrontendError>>
 where
-    T: Actor + Handler<NewEvent> + Clone,
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
 {
     let event_handler = req.state().clone();
     let id = req.match_info()["secret"].to_owned();
@@ -195,11 +308,15 @@ where
                         HTTPCreated
                             .build()
                             .header(header::CONTENT_TYPE, "text/html")
-                            .body(success(event).into_string())
+                            .body(success(event, "Event Bot | Created Event").into_string())
                             .context(FrontendErrorKind::Body)
                             .map_err(FrontendError::from)
                     })
-                    .or_else(move |_| load_form(req))
+                    .or_else(move |_| {
+                        let id = req.match_info()["secret"].to_owned();
+                        let submit_url = format!("/events/new/{}", id);
+                        load_form(req, None, id, submit_url, "Event Bot | New Event")
+                    })
             }),
     )
 }
@@ -209,7 +326,7 @@ pub fn build<T>(
     prefix: Option<&str>,
 ) -> Application<EventHandler<T>>
 where
-    T: Actor + Handler<NewEvent> + Clone,
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
 {
     let app = Application::with_state(event_handler);
 
@@ -224,14 +341,19 @@ where
             .secure(false)
             .finish(),
     )).resource("/events/new/{secret}", |r| {
-        r.method(Method::GET).f(new_form);
-        r.method(Method::POST).f(submitted);
-    }).handler("/assets/", fs::StaticFiles::new("assets/", true))
+            r.method(Method::GET).f(new_form);
+            r.method(Method::POST).f(submitted);
+        })
+        .resource("/events/edit/{secret}", |r| {
+            r.method(Method::GET).f(edit_form);
+            r.method(Method::POST).f(updated);
+        })
+        .handler("/assets/", fs::StaticFiles::new("assets/", true))
 }
 
 pub fn start<T>(handler: SyncAddress<T>, addr: &str, prefix: Option<&'static str>)
 where
-    T: Actor + Handler<NewEvent> + Clone,
+    T: Actor + Handler<LookupEvent> + Handler<NewEvent> + Handler<EditEvent> + Clone,
 {
     HttpServer::new(move || build(EventHandler::new(handler.clone()), prefix))
         .bind(addr)

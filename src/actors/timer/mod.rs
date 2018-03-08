@@ -159,59 +159,95 @@ impl Timer {
         let now = Utc::now();
 
         for event in events {
-            debug!("Handling event");
+            self.new_event(event, now);
+        }
+    }
 
-            match self.states.get(&event.id()) {
-                Some(&TimerState::WaitingNotify) => (),
-                Some(&TimerState::WaitingStart) => (),
-                Some(&TimerState::WaitingEnd) => (),
-                Some(&TimerState::Future) => (),
-                None => {
-                    debug!("New event!");
-                    let start = event.start_date().with_timezone(&Utc);
-                    let end = event.end_date().with_timezone(&Utc);
+    fn update_event(&mut self, event: Event) {
+        if let Some(state) = self.states.remove(&event.id()) {
+            if let Some(old_event) = self.events.remove(&event.id()) {
+                match state {
+                    TimerState::WaitingNotify => {
+                        let notify_time =
+                            old_event.start_date().to_owned() - OldDuration::minutes(45);
+                        let notify_index = notify_time.minute() as usize;
 
-                    let should_have_ended = now > end;
-                    let ending_soon = now + OldDuration::hours(1) > end;
-                    let should_have_started = now > start;
-                    let starting_soon = now + OldDuration::minutes(45) > start;
-                    let should_drop = now - OldDuration::hours(1) > start;
-
-                    if should_have_ended {
-                        debug!("Should have ended");
-                        // delete event
-                        self.delete_event(event);
-                    } else {
-                        if should_have_started {
-                            debug!("Should have started");
-                            // notify start
-                            self.notify_now(event.clone());
-
-                            let end_index = event.end_date().minute() as usize;
-
-                            if ending_soon {
-                                debug!("Ending soon");
-                                self.waiting_end[end_index].insert(event.id());
-                                self.states.insert(event.id(), TimerState::WaitingEnd);
-                            } else {
-                                debug!("Not ending soon");
-                                self.futures[end_index].insert(event.id());
-                                self.states.insert(event.id(), TimerState::Future);
-                            }
-                        } else if starting_soon {
-                            debug!("Starting soon");
-                            self.waiting_start[event.start_date().minute() as usize]
-                                .insert(event.id());
-                            self.notify_soon(event.clone());
-                        } else if !should_drop {
-                            debug!("Waiting");
-                            self.waiting_notify[event.start_date().minute() as usize]
-                                .insert(event.id());
-                            self.states.insert(event.id(), TimerState::WaitingNotify);
-                        }
-
-                        self.events.insert(event.id(), event);
+                        self.waiting_notify[notify_index].remove(&event.id());
                     }
+                    TimerState::WaitingStart => {
+                        let start_index = old_event.start_date().minute() as usize;
+
+                        self.waiting_start[start_index].remove(&event.id());
+                    }
+                    TimerState::WaitingEnd => {
+                        let end_index = old_event.end_date().minute() as usize;
+
+                        self.waiting_end[end_index].remove(&event.id());
+                    }
+                    TimerState::Future => {
+                        let end_index = old_event.end_date().minute() as usize;
+
+                        self.futures[end_index].remove(&event.id());
+                    }
+                }
+            }
+        }
+
+        self.new_event(event, Utc::now());
+    }
+
+    fn new_event(&mut self, event: Event, now: DateTime<Utc>) {
+        debug!("Handling event");
+
+        match self.states.get(&event.id()) {
+            Some(&TimerState::WaitingNotify) => (),
+            Some(&TimerState::WaitingStart) => (),
+            Some(&TimerState::WaitingEnd) => (),
+            Some(&TimerState::Future) => (),
+            None => {
+                debug!("New event!");
+                let start = event.start_date().with_timezone(&Utc);
+                let end = event.end_date().with_timezone(&Utc);
+
+                let should_have_ended = now > end;
+                let ending_soon = now + OldDuration::hours(1) > end;
+                let should_have_started = now > start;
+                let starting_soon = now + OldDuration::minutes(45) > start;
+                let should_drop = now - OldDuration::hours(1) > start;
+
+                if should_have_ended {
+                    debug!("Should have ended");
+                    // delete event
+                    self.delete_event(event);
+                } else {
+                    if should_have_started {
+                        debug!("Should have started");
+                        // notify start
+                        self.notify_now(event.clone());
+
+                        let end_index = event.end_date().minute() as usize;
+
+                        if ending_soon {
+                            debug!("Ending soon");
+                            self.waiting_end[end_index].insert(event.id());
+                            self.states.insert(event.id(), TimerState::WaitingEnd);
+                        } else {
+                            debug!("Not ending soon");
+                            self.futures[end_index].insert(event.id());
+                            self.states.insert(event.id(), TimerState::Future);
+                        }
+                    } else if starting_soon {
+                        debug!("Starting soon");
+                        self.waiting_start[event.start_date().minute() as usize].insert(event.id());
+                        self.notify_soon(event.clone());
+                    } else if !should_drop {
+                        debug!("Waiting");
+                        self.waiting_notify[event.start_date().minute() as usize]
+                            .insert(event.id());
+                        self.states.insert(event.id(), TimerState::WaitingNotify);
+                    }
+
+                    self.events.insert(event.id(), event);
                 }
             }
         }

@@ -16,6 +16,19 @@ pub struct Event {
 }
 
 impl Event {
+    pub fn from_parts(
+        title: String,
+        description: String,
+        start_date: DateTime<Tz>,
+        end_date: DateTime<Tz>,
+    ) -> Self {
+        Event {
+            title,
+            description,
+            start_date,
+            end_date,
+        }
+    }
     pub fn from_option(option_event: Option<OptionEvent>) -> Result<Self, FrontendError> {
         CreateEvent::from_option(option_event.ok_or(FrontendErrorKind::MissingField)?)?
             .try_to_event()
@@ -323,6 +336,26 @@ impl CreateEvent {
             start_date: start_datetime,
             end_date: end_datetime,
         })
+    }
+}
+
+impl From<Event> for CreateEvent {
+    fn from(e: Event) -> Self {
+        CreateEvent {
+            title: e.title,
+            description: e.description,
+            start_year: e.start_date.year(),
+            start_month: e.start_date.month(),
+            start_day: e.start_date.day(),
+            start_hour: e.start_date.hour(),
+            start_minute: e.start_date.minute(),
+            end_year: e.end_date.year(),
+            end_month: e.end_date.month(),
+            end_day: e.end_date.day(),
+            end_hour: e.end_date.hour(),
+            end_minute: e.end_date.minute(),
+            timezone: e.end_date.timezone().name().to_owned(),
+        }
     }
 }
 

@@ -6,10 +6,11 @@ use telebot::objects::Integer;
 use tokio_postgres::Connection;
 
 use actors::db_broker::DbBroker;
-use models::event::{CreateEvent, Event};
+use models::event::{CreateEvent, Event, UpdateEvent};
 use models::chat::{Chat, CreateChat};
 use models::chat_system::ChatSystem;
 use models::new_event_link::NewEventLink;
+use models::edit_event_link::EditEventLink;
 use models::user::{CreateUser, User};
 
 use error::{EventError, EventErrorKind};
@@ -49,14 +50,14 @@ impl DbActor {
         self.take_connection()
             .into_future()
             .map_err(Err)
-            .and_then(move |connection| ChatSystem::by_id(system_id, connection).map_err(Ok))
-            .and_then(move |(chat_system, connection)| {
+            .and_then(move |connection| {
                 User::by_ids(hosts, connection)
                     .map_err(Ok)
-                    .map(|(hosts, connection)| (chat_system, hosts, connection))
+                    .map(|(hosts, connection)| (hosts, connection))
             })
-            .and_then(move |(chat_system, hosts, connection)| {
+            .and_then(move |(hosts, connection)| {
                 let new_event = CreateEvent {
+                    system_id,
                     start_date,
                     end_date,
                     title,
@@ -64,8 +65,59 @@ impl DbActor {
                     hosts,
                 };
 
-                new_event.create(&chat_system, connection).map_err(Ok)
+                new_event.create(connection).map_err(Ok)
             })
+    }
+
+    fn edit_event(
+        &mut self,
+        id: i32,
+        system_id: i32,
+        title: String,
+        description: String,
+        start_date: DateTime<Tz>,
+        end_date: DateTime<Tz>,
+        hosts: Vec<i32>,
+    ) -> impl Future<Item = (Event, Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| {
+                let updated_event = UpdateEvent {
+                    id,
+                    system_id,
+                    start_date,
+                    end_date,
+                    title,
+                    description,
+                    hosts,
+                };
+
+                updated_event.update(connection).map_err(Ok)
+            })
+    }
+
+    fn lookup_event(
+        &mut self,
+        event_id: i32,
+    ) -> impl Future<Item = (Event, Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| Event::by_id(event_id, connection).map_err(Ok))
+    }
+
+    fn lookup_events_by_user_id(
+        &mut self,
+        user_id: Integer,
+    ) -> impl Future<Item = (Vec<Event>, Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| Event::by_user_id(user_id, connection).map_err(Ok))
     }
 
     fn delete_event(
@@ -240,6 +292,51 @@ impl DbActor {
             .into_future()
             .map_err(Err)
             .and_then(move |connection| User::get_with_chats(connection).map_err(Ok))
+    }
+
+    fn store_edit_event_link(
+        &mut self,
+        user_id: i32,
+        system_id: i32,
+        event_id: i32,
+        secret: String,
+    ) -> impl Future<
+        Item = (EditEventLink, Connection),
+        Error = Result<(EventError, Connection), EventError>,
+    > {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| {
+                EditEventLink::create(user_id, system_id, event_id, secret, connection).map_err(Ok)
+            })
+    }
+
+    fn get_edit_event_link_by_event_id(
+        &mut self,
+        event_id: i32,
+    ) -> impl Future<
+        Item = (EditEventLink, Connection),
+        Error = Result<(EventError, Connection), EventError>,
+    > {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| {
+                EditEventLink::by_event_id(event_id, connection).map_err(Ok)
+            })
+    }
+
+    fn delete_edit_event_link(
+        &mut self,
+        id: i32,
+    ) -> impl Future<Item = ((), Connection), Error = Result<(EventError, Connection), EventError>>
+    {
+        self.take_connection()
+            .into_future()
+            .map_err(Err)
+            .and_then(move |connection| EditEventLink::delete(id, connection).map_err(Ok))
+            .map(|c| ((), c))
     }
 
     fn store_event_link(

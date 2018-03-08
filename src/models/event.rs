@@ -14,7 +14,6 @@ use tokio_postgres::transaction::Transaction;
 use tokio_postgres::types::ToSql;
 
 use error::{EventError, EventErrorKind};
-use super::chat_system::ChatSystem;
 use super::user::User;
 use util::*;
 
@@ -155,12 +154,112 @@ impl Event {
         })
     }
 
+    /// Lookup event by the host's id
+    pub fn by_user_id(
+        user_id: Integer,
+        connection: Connection,
+    ) -> impl Future<Item = (Vec<Event>, Connection), Error = (EventError, Connection)> {
+        let sql = "SELECT evt.id, evt.system_id, evt.start_date, evt.end_date, evt.title, evt.description, evt.timezone, usr.id, usr.user_id, usr.username
+                    FROM events AS evt
+                    LEFT JOIN hosts AS h ON h.events_id = evt.id
+                    INNER JOIN users AS usr ON usr.id = h.users_id
+                    WHERE usr.user_id = $1";
+        debug!("{}", sql);
+
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&user_id])
+                    .map(move |row| {
+                        let tz: String = row.get(6);
+
+                        let sd: DateTime<Utc> = row.get(2);
+                        let ed: DateTime<Utc> = row.get(3);
+
+                        tz.parse::<Tz>().map(|timezone| Event {
+                            id: row.get(0),
+                            start_date: sd.with_timezone(&timezone),
+                            end_date: ed.with_timezone(&timezone),
+                            title: row.get(4),
+                            description: row.get(5),
+                            hosts: User::maybe_from_parts(row.get(7), row.get(8), row.get(9))
+                                .into_iter()
+                                .collect(),
+                            system_id: row.get(1),
+                        })
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+            })
+            .map(|(events, connection)| {
+                (
+                    Event::condense_events(events.into_iter().filter_map(Result::ok).collect()),
+                    connection,
+                )
+            })
+    }
+
+    /// Lookup event by the event id
+    pub fn by_id(
+        id: i32,
+        connection: Connection,
+    ) -> impl Future<Item = (Event, Connection), Error = (EventError, Connection)> {
+        let sql = "SELECT evt.system_id, evt.start_date, evt.end_date, evt.title, evt.description, evt.timezone, usr.id, usr.user_id, usr.username
+                    FROM events AS evt
+                    LEFT JOIN hosts AS h ON h.events_id = evt.id
+                    INNER JOIN users AS usr ON usr.id = h.users_id
+                    WHERE evt.id = $1";
+        debug!("{}", sql);
+
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&id])
+                    .map(move |row| {
+                        let tz: String = row.get(5);
+
+                        let sd: DateTime<Utc> = row.get(1);
+                        let ed: DateTime<Utc> = row.get(2);
+
+                        tz.parse::<Tz>().map(|timezone| Event {
+                            id,
+                            start_date: sd.with_timezone(&timezone),
+                            end_date: ed.with_timezone(&timezone),
+                            title: row.get(3),
+                            description: row.get(4),
+                            hosts: User::maybe_from_parts(row.get(6), row.get(7), row.get(8))
+                                .into_iter()
+                                .collect(),
+                            system_id: row.get(0),
+                        })
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+            })
+            .and_then(|(mut events, connection)| {
+                if events.len() > 0 {
+                    if let Ok(event) = events.remove(0) {
+                        Ok((event, connection))
+                    } else {
+                        Err((EventErrorKind::Lookup.into(), connection))
+                    }
+                } else {
+                    Err((EventErrorKind::Lookup.into(), connection))
+                }
+            })
+    }
+
     /// Delete and `Event` and all associated `hosts` given an ID
     pub fn delete_by_id(
         id: i32,
         connection: Connection,
     ) -> impl Future<Item = (u64, Connection), Error = (EventError, Connection)> {
         let sql = "DELETE FROM events AS ev WHERE ev.id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -185,6 +284,7 @@ impl Event {
         let sql = "SELECT DISTINCT ev.id, ev.start_date, ev.end_date, ev.title, ev.description, ev.system_id, ev.timezone
                     FROM events AS ev
                     WHERE ev.start_date > $1 AND ev.start_date < $2";
+        debug!("{}", sql);
 
         let sd = start_date.with_timezone(&Utc);
         let ed = end_date.with_timezone(&Utc);
@@ -236,6 +336,7 @@ impl Event {
                 LEFT JOIN hosts AS h ON h.events_id = evt.id
                 INNER JOIN users AS usr ON usr.id = h.users_id
                 WHERE evt.system_id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -291,6 +392,7 @@ impl Event {
                LEFT JOIN hosts AS h ON h.events_id = evt.id
                LEFT JOIN users AS usr ON h.users_id = usr.id
                WHERE ch.id = $1";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -345,6 +447,7 @@ impl Event {
                LEFT JOIN users AS usr ON h.users_id = usr.id
                WHERE ch.chat_id = $1
                ORDER BY evt.start_date, evt.id";
+        debug!("{}", sql);
 
         connection
             .prepare(sql)
@@ -386,7 +489,72 @@ impl Event {
 }
 
 #[derive(Clone, Debug)]
+pub struct UpdateEvent {
+    pub id: i32,
+    pub system_id: i32,
+    pub start_date: DateTime<Tz>,
+    pub end_date: DateTime<Tz>,
+    pub title: String,
+    pub description: String,
+    pub hosts: Vec<i32>,
+}
+
+impl UpdateEvent {
+    pub fn update(
+        self,
+        connection: Connection,
+    ) -> impl Future<Item = (Event, Connection), Error = (EventError, Connection)> {
+        let sql = "UPDATE events
+                    SET start_date = $1, end_date = $2, title = $3, description = $4, timezone = $5
+                    WHERE id = $6";
+        debug!("{}", sql);
+
+        let UpdateEvent {
+            id,
+            system_id,
+            start_date,
+            end_date,
+            title,
+            description,
+            hosts: _hosts,
+        } = self;
+
+        let timezone = start_date.timezone().name();
+        let sd = start_date.with_timezone(&Utc);
+        let ed = end_date.with_timezone(&Utc);
+
+        connection
+            .prepare(&sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .execute(&s, &[&sd, &ed, &title, &description, &timezone, &id])
+                    .map_err(update_error)
+                    .and_then(move |(count, connection)| {
+                        if count > 0 {
+                            Ok((
+                                Event {
+                                    id,
+                                    system_id,
+                                    start_date,
+                                    end_date,
+                                    title,
+                                    description,
+                                    hosts: Vec::new(),
+                                },
+                                connection,
+                            ))
+                        } else {
+                            Err((EventErrorKind::Update.into(), connection))
+                        }
+                    })
+            })
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct CreateEvent {
+    pub system_id: i32,
     pub start_date: DateTime<Tz>,
     pub end_date: DateTime<Tz>,
     pub title: String,
@@ -398,12 +566,13 @@ impl CreateEvent {
     /// Create a future which yields the new Event
     pub fn create(
         self,
-        chat_system: &ChatSystem,
         connection: Connection,
     ) -> impl Future<Item = (Event, Connection), Error = (EventError, Connection)> {
         let sql = "INSERT INTO events (start_date, end_date, title, description, system_id, timezone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id";
+        debug!("{}", sql);
 
         let CreateEvent {
+            system_id,
             start_date,
             end_date,
             title,
@@ -411,15 +580,13 @@ impl CreateEvent {
             hosts,
         } = self;
 
-        let id = chat_system.id();
-
         connection
             .transaction()
             .map_err(transaction_error)
             .and_then(move |transaction| {
                 insert_event(
                     sql,
-                    id,
+                    system_id,
                     start_date,
                     end_date,
                     title,
@@ -502,6 +669,7 @@ fn prepare_hosts(
 ) -> Result<(String, Event, Transaction), (EventError, Event, Transaction)> {
     if hosts.len() > 0 {
         let sql = "INSERT INTO hosts (users_id, events_id) VALUES".to_owned();
+        debug!("{}", sql);
 
         let values = hosts
             .iter()
