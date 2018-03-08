@@ -6,7 +6,7 @@ use futures::{Future, IntoFuture};
 
 use actors::db_broker::DbBroker;
 use actors::db_actor::messages::{DeleteEditEventLink, DeleteEventLink, EditEvent,
-                                 EditEventLinkByEventId, EventLinkByUserId, LookupEvent, NewEvent};
+                                 LookupEditEventLink, LookupEvent, LookupEventLink, NewEvent};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{NewEvent as TgNewEvent, UpdateEvent as TgUpdateEvent};
 use actors::timer::Timer;
@@ -32,11 +32,11 @@ impl EventActor {
         debug!("Got event: {:?}", event);
 
         if let Some(index) = id.rfind('=') {
-            let (base64d, user_id) = id.split_at(index);
+            let (base64d, nel_id) = id.split_at(index);
             let base64d = base64d.to_owned();
-            let user_id = user_id.trim_left_matches('=');
+            let nel_id = nel_id.trim_left_matches('=');
 
-            if let Ok(user_id) = user_id.parse::<i32>() {
+            if let Ok(nel_id) = nel_id.parse::<i32>() {
                 let database = self.db.clone();
 
                 let tg = self.tg.clone();
@@ -44,8 +44,8 @@ impl EventActor {
 
                 Arbiter::handle().spawn(
                     self.db
-                        .call_fut(EventLinkByUserId { user_id })
-                        .then(flatten::<EventLinkByUserId>)
+                        .call_fut(LookupEventLink(nel_id))
+                        .then(flatten::<LookupEventLink>)
                         .and_then(move |nel| match verify_secret(&base64d, nel.secret()) {
                             Ok(b) => if b {
                                 Ok(nel)
@@ -88,14 +88,14 @@ impl EventActor {
         &mut self,
         id: String,
     ) -> impl Future<Item = FrontendEvent, Error = FrontendError> {
-        let event_id = if let Some(index) = id.rfind('=') {
-            let (base64d, event_id) = id.split_at(index);
+        let eel_id = if let Some(index) = id.rfind('=') {
+            let (base64d, eel_id) = id.split_at(index);
             let base64d = base64d.to_owned();
-            let event_id = event_id.trim_left_matches('=');
+            let eel_id = eel_id.trim_left_matches('=');
 
-            event_id
+            eel_id
                 .parse::<i32>()
-                .map(|event_id| (event_id, base64d))
+                .map(|eel_id| (eel_id, base64d))
                 .map_err(|e| EventError::from(e.context(EventErrorKind::Permissions)))
         } else {
             Err(EventErrorKind::Permissions.into())
@@ -103,12 +103,12 @@ impl EventActor {
 
         let database = self.db.clone();
 
-        event_id
+        eel_id
             .into_future()
-            .and_then(move |(event_id, base64d)| {
+            .and_then(move |(eel_id, base64d)| {
                 database
-                    .call_fut(EditEventLinkByEventId { event_id })
-                    .then(flatten::<EditEventLinkByEventId>)
+                    .call_fut(LookupEditEventLink(eel_id))
+                    .then(flatten::<LookupEditEventLink>)
                     .and_then(move |eel| match verify_secret(&base64d, eel.secret()) {
                         Ok(b) => if b {
                             Ok(eel)
@@ -140,11 +140,11 @@ impl EventActor {
         debug!("Got event: {:?}", event);
 
         if let Some(index) = id.rfind('=') {
-            let (base64d, event_id) = id.split_at(index);
+            let (base64d, eel_id) = id.split_at(index);
             let base64d = base64d.to_owned();
-            let event_id = event_id.trim_left_matches('=');
+            let eel_id = eel_id.trim_left_matches('=');
 
-            if let Ok(event_id) = event_id.parse::<i32>() {
+            if let Ok(eel_id) = eel_id.parse::<i32>() {
                 let database = self.db.clone();
 
                 let tg = self.tg.clone();
@@ -152,8 +152,8 @@ impl EventActor {
 
                 Arbiter::handle().spawn(
                     self.db
-                        .call_fut(EditEventLinkByEventId { event_id })
-                        .then(flatten::<EditEventLinkByEventId>)
+                        .call_fut(LookupEditEventLink(eel_id))
+                        .then(flatten::<LookupEditEventLink>)
                         .and_then(move |eel| match verify_secret(&base64d, eel.secret()) {
                             Ok(b) => if b {
                                 Ok(eel)
@@ -169,7 +169,7 @@ impl EventActor {
                                 .join(
                                     database
                                         .call_fut(EditEvent {
-                                            id: event_id,
+                                            id: eel.event_id(),
                                             system_id: eel.system_id(),
                                             title: event.title().to_owned(),
                                             description: event.description().to_owned(),

@@ -175,11 +175,11 @@ impl Handler<StoreEditEventLink> for DbActor {
     }
 }
 
-impl Handler<EditEventLinkByEventId> for DbActor {
-    type Result = ResponseFuture<Self, EditEventLinkByEventId>;
+impl Handler<LookupEditEventLink> for DbActor {
+    type Result = ResponseFuture<Self, LookupEditEventLink>;
 
-    fn handle(&mut self, msg: EditEventLinkByEventId, _: &mut Self::Context) -> Self::Result {
-        DbActor::wrap_fut(self.get_edit_event_link_by_event_id(msg.event_id))
+    fn handle(&mut self, msg: LookupEditEventLink, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_edit_event_link(msg.0))
     }
 }
 
@@ -199,11 +199,11 @@ impl Handler<StoreEventLink> for DbActor {
     }
 }
 
-impl Handler<EventLinkByUserId> for DbActor {
-    type Result = ResponseFuture<Self, EventLinkByUserId>;
+impl Handler<LookupEventLink> for DbActor {
+    type Result = ResponseFuture<Self, LookupEventLink>;
 
-    fn handle(&mut self, msg: EventLinkByUserId, _: &mut Self::Context) -> Self::Result {
-        DbActor::wrap_fut(self.get_event_link_by_user_id(msg.user_id))
+    fn handle(&mut self, msg: LookupEventLink, _: &mut Self::Context) -> Self::Result {
+        DbActor::wrap_fut(self.get_event_link(msg.0))
     }
 }
 

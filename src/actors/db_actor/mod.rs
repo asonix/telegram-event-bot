@@ -323,9 +323,9 @@ impl DbActor {
             })
     }
 
-    fn get_edit_event_link_by_event_id(
+    fn get_edit_event_link(
         &mut self,
-        event_id: i32,
+        id: i32,
     ) -> impl Future<
         Item = (EditEventLink, Connection),
         Error = Result<(EventError, Connection), EventError>,
@@ -333,9 +333,7 @@ impl DbActor {
         self.take_connection()
             .into_future()
             .map_err(Err)
-            .and_then(move |connection| {
-                EditEventLink::by_event_id(event_id, connection).map_err(Ok)
-            })
+            .and_then(move |connection| EditEventLink::by_id(id, connection).map_err(Ok))
     }
 
     fn delete_edit_event_link(
@@ -367,9 +365,9 @@ impl DbActor {
             })
     }
 
-    fn get_event_link_by_user_id(
+    fn get_event_link(
         &mut self,
-        user_id: i32,
+        id: i32,
     ) -> impl Future<
         Item = (NewEventLink, Connection),
         Error = Result<(EventError, Connection), EventError>,
@@ -377,7 +375,7 @@ impl DbActor {
         self.take_connection()
             .into_future()
             .map_err(Err)
-            .and_then(move |connection| NewEventLink::by_user_id(user_id, connection).map_err(Ok))
+            .and_then(move |connection| NewEventLink::by_id(id, connection).map_err(Ok))
     }
 
     fn delete_event_link(

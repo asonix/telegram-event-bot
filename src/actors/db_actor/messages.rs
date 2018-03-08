@@ -215,11 +215,9 @@ impl ResponseType for StoreEditEventLink {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct EditEventLinkByEventId {
-    pub event_id: i32,
-}
+pub struct LookupEditEventLink(pub i32);
 
-impl ResponseType for EditEventLinkByEventId {
+impl ResponseType for LookupEditEventLink {
     type Item = EditEventLink;
     type Error = EventError;
 }
@@ -246,11 +244,9 @@ impl ResponseType for StoreEventLink {
     type Error = EventError;
 }
 #[derive(Clone, Copy, Debug)]
-pub struct EventLinkByUserId {
-    pub user_id: i32,
-}
+pub struct LookupEventLink(pub i32);
 
-impl ResponseType for EventLinkByUserId {
+impl ResponseType for LookupEventLink {
     type Item = NewEventLink;
     type Error = EventError;
 }

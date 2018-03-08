@@ -355,10 +355,9 @@ impl TelegramMessageActor {
                                                             system_id: chat_system.id(),
                                                             secret,
                                                         }).then(flatten::<StoreEventLink>)
-                                                            .map(move |_| user)
                                                     })
                                             })
-                                            .map(move |user| {
+                                            .map(move |nel| {
                                                 tg.send(SendUrl(
                                                     chat_id,
                                                     "create".to_owned(),
@@ -366,7 +365,7 @@ impl TelegramMessageActor {
                                                         "{}/events/new/{}={}",
                                                         url,
                                                         base64d,
-                                                        user.id()
+                                                        nel.id()
                                                     ),
                                                 ))
                                             })
@@ -402,9 +401,8 @@ impl TelegramMessageActor {
                                                     event_id: event.id(),
                                                     secret,
                                                 }).then(flatten::<StoreEditEventLink>)
-                                                    .map(move |_| event)
                                             })
-                                            .map(move |event| {
+                                            .map(move |eel| {
                                                 tg.send(SendUrl(
                                                     chat_id,
                                                     "update".to_owned(),
@@ -412,7 +410,7 @@ impl TelegramMessageActor {
                                                         "{}/events/edit/{}={}",
                                                         url,
                                                         base64d,
-                                                        event.id()
+                                                        eel.id()
                                                     ),
                                                 ))
                                             })

@@ -63,13 +63,13 @@ impl NewEventLink {
             })
     }
 
-    pub fn by_user_id(
-        user_id: i32,
+    pub fn by_id(
+        id: i32,
         connection: Connection,
     ) -> impl Future<Item = (Self, Connection), Error = (EventError, Connection)> {
         let sql = "SELECT nel.id, nel.users_id, nel.system_id, nel.secret
                     FROM new_event_links AS nel
-                    WHERE nel.users_id = $1 AND nel.used = FALSE";
+                    WHERE nel.id = $1 AND nel.used = FALSE";
         debug!("{}", sql);
 
         connection
@@ -77,7 +77,7 @@ impl NewEventLink {
             .map_err(prepare_error)
             .and_then(move |(s, connection)| {
                 connection
-                    .query(&s, &[&user_id])
+                    .query(&s, &[&id])
                     .map(|row| NewEventLink {
                         id: row.get(0),
                         user_id: row.get(1),
