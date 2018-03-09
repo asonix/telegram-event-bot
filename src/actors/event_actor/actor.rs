@@ -9,10 +9,10 @@ impl Actor for EventActor {
 }
 
 impl Handler<NewEvent> for EventActor {
-    type Result = ();
+    type Result = ResponseFuture<Self, NewEvent>;
 
     fn handle(&mut self, msg: NewEvent, _: &mut Self::Context) -> Self::Result {
-        self.new_event(msg.0, msg.1);
+        Box::new(wrap_future(self.new_event(msg.0, msg.1)))
     }
 }
 
@@ -25,9 +25,9 @@ impl Handler<LookupEvent> for EventActor {
 }
 
 impl Handler<EditEvent> for EventActor {
-    type Result = ();
+    type Result = ResponseFuture<Self, EditEvent>;
 
     fn handle(&mut self, msg: EditEvent, _: &mut Self::Context) -> Self::Result {
-        self.edit_event(msg.0, msg.1);
+        Box::new(wrap_future(self.edit_event(msg.0, msg.1)))
     }
 }

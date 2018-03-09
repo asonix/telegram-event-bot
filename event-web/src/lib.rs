@@ -22,7 +22,7 @@ use chrono::Datelike;
 use chrono::offset::Utc;
 use chrono_tz::Tz;
 use failure::{Fail, ResultExt};
-use futures::Future;
+use futures::{Future, IntoFuture};
 use http::header;
 
 mod error;
@@ -49,13 +49,35 @@ where
         EventHandler { handler }
     }
 
-    pub fn notify(&self, event: Event, id: String) {
-        self.handler.send(NewEvent(event, id));
+    pub fn notify(
+        &self,
+        event: Event,
+        id: String,
+    ) -> impl Future<Item = (), Error = FrontendError> {
+        self.handler
+            .call_fut(NewEvent(event, id))
+            .then(|msg_res| match msg_res {
+                Ok(res) => res,
+                Err(e) => Err(FrontendError::from(e.context(FrontendErrorKind::Canceled))),
+            })
     }
 
     fn request_event(&self, id: String) -> impl Future<Item = Event, Error = FrontendError> {
         self.handler
             .call_fut(LookupEvent(id))
+            .then(|msg_res| match msg_res {
+                Ok(res) => res,
+                Err(e) => Err(FrontendError::from(e.context(FrontendErrorKind::Canceled))),
+            })
+    }
+
+    fn edit_event(
+        &self,
+        event: Event,
+        id: String,
+    ) -> impl Future<Item = (), Error = FrontendError> {
+        self.handler
+            .call_fut(EditEvent(event.clone(), id))
             .then(|msg_res| match msg_res {
                 Ok(res) => res,
                 Err(e) => Err(FrontendError::from(e.context(FrontendErrorKind::Canceled))),
@@ -67,14 +89,14 @@ pub struct NewEvent(pub Event, pub String);
 
 impl ResponseType for NewEvent {
     type Item = ();
-    type Error = ();
+    type Error = FrontendError;
 }
 
 pub struct EditEvent(pub Event, pub String);
 
 impl ResponseType for EditEvent {
     type Item = ();
-    type Error = ();
+    type Error = FrontendError;
 }
 
 pub struct LookupEvent(pub String);
@@ -247,15 +269,16 @@ where
             })
             .and_then(move |mut req| {
                 Event::from_option(req.session().get("option_event").unwrap_or(None))
-                    .and_then(|event| {
-                        event_handler.handler.send(EditEvent(event.clone(), id));
-
-                        HTTPCreated
-                            .build()
-                            .header(header::CONTENT_TYPE, "text/html")
-                            .body(success(event, "Event Bot | Updated Event").into_string())
-                            .context(FrontendErrorKind::Body)
-                            .map_err(FrontendError::from)
+                    .into_future()
+                    .and_then(move |event| {
+                        event_handler.edit_event(event.clone(), id).and_then(|_| {
+                            HTTPCreated
+                                .build()
+                                .header(header::CONTENT_TYPE, "text/html")
+                                .body(success(event, "Event Bot | Updated Event").into_string())
+                                .context(FrontendErrorKind::Body)
+                                .map_err(FrontendError::from)
+                        })
                     })
                     .or_else(move |_| {
                         let id = req.match_info()["secret"].to_owned();

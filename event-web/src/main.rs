@@ -12,18 +12,18 @@ impl Actor for MyHandler {
 }
 
 impl Handler<NewEvent> for MyHandler {
-    type Result = ();
+    type Result = Result<(), FrontendError>;
 
     fn handle(&mut self, msg: NewEvent, _: &mut Self::Context) -> Self::Result {
-        println!("Event: {:?}", msg.0);
+        Ok(println!("Event: {:?}", msg.0))
     }
 }
 
 impl Handler<EditEvent> for MyHandler {
-    type Result = ();
+    type Result = Result<(), FrontendError>;
 
     fn handle(&mut self, msg: EditEvent, _: &mut Self::Context) -> Self::Result {
-        println!("Event: {:?}", msg.0);
+        Ok(println!("Event: {:?}", msg.0))
     }
 }
 

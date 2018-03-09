@@ -1,4 +1,4 @@
-use actix::{Address, Arbiter};
+use actix::Address;
 use event_web::{Event as FrontendEvent, FrontendError, FrontendErrorKind};
 use event_web::verify_secret;
 use failure::Fail;
@@ -28,60 +28,68 @@ impl EventActor {
         EventActor { tg, db, timer }
     }
 
-    fn new_event(&mut self, event: FrontendEvent, id: String) {
+    fn new_event(
+        &mut self,
+        event: FrontendEvent,
+        id: String,
+    ) -> impl Future<Item = (), Error = FrontendError> {
         debug!("Got event: {:?}", event);
 
-        if let Some(index) = id.rfind('=') {
-            let (base64d, nel_id) = id.split_at(index);
-            let base64d = base64d.to_owned();
-            let nel_id = nel_id.trim_left_matches('=');
+        let database = self.db.clone();
+        let db = self.db.clone();
+        let tg = self.tg.clone();
+        let timer = self.timer.clone();
 
-            if let Ok(nel_id) = nel_id.parse::<i32>() {
-                let database = self.db.clone();
+        id.rfind('=')
+            .ok_or(EventError::from(EventErrorKind::Secret))
+            .and_then(move |index| {
+                let (base64d, nel_id) = id.split_at(index);
+                let base64d = base64d.to_owned();
+                let nel_id = nel_id.trim_left_matches('=');
 
-                let tg = self.tg.clone();
-                let timer = self.timer.clone();
-
-                Arbiter::handle().spawn(
-                    self.db
-                        .call_fut(LookupEventLink(nel_id))
-                        .then(flatten::<LookupEventLink>)
-                        .and_then(move |nel| match verify_secret(&base64d, nel.secret()) {
-                            Ok(b) => if b {
-                                Ok(nel)
-                            } else {
-                                Err(EventError::from(EventErrorKind::Frontend))
-                            },
-                            Err(e) => Err(EventError::from(e.context(EventErrorKind::Frontend))),
-                        })
-                        .and_then(move |nel| {
-                            database
-                                .call_fut(DeleteEventLink { id: nel.id() })
-                                .then(flatten::<DeleteEventLink>)
-                                .join(
-                                    database
-                                        .call_fut(NewEvent {
-                                            system_id: nel.system_id(),
-                                            title: event.title().to_owned(),
-                                            description: event.description().to_owned(),
-                                            start_date: event.start_date(),
-                                            end_date: event.end_date(),
-                                            hosts: vec![nel.user_id()],
-                                        })
-                                        .then(flatten::<NewEvent>)
-                                        .map(move |event| {
-                                            tg.send(TgNewEvent(event.clone()));
-                                            timer.send(Events {
-                                                events: vec![event],
-                                            });
-                                        }),
-                                )
-                        })
-                        .map(|_| ())
-                        .map_err(|e| error!("Error: {:?}", e)),
-                )
-            }
-        }
+                nel_id
+                    .parse::<i32>()
+                    .map_err(|_| EventError::from(EventErrorKind::Secret))
+                    .map(|nel_id| (nel_id, base64d))
+            })
+            .into_future()
+            .and_then(move |(nel_id, base64d)| {
+                db.call_fut(LookupEventLink(nel_id))
+                    .then(flatten::<LookupEventLink>)
+                    .and_then(move |nel| match verify_secret(&base64d, nel.secret()) {
+                        Ok(b) => if b {
+                            Ok(nel)
+                        } else {
+                            Err(EventError::from(EventErrorKind::Frontend))
+                        },
+                        Err(e) => Err(EventError::from(e.context(EventErrorKind::Frontend))),
+                    })
+                    .and_then(move |nel| {
+                        database
+                            .call_fut(DeleteEventLink { id: nel.id() })
+                            .then(flatten::<DeleteEventLink>)
+                            .join(
+                                database
+                                    .call_fut(NewEvent {
+                                        system_id: nel.system_id(),
+                                        title: event.title().to_owned(),
+                                        description: event.description().to_owned(),
+                                        start_date: event.start_date(),
+                                        end_date: event.end_date(),
+                                        hosts: vec![nel.user_id()],
+                                    })
+                                    .then(flatten::<NewEvent>)
+                                    .map(move |event| {
+                                        tg.send(TgNewEvent(event.clone()));
+                                        timer.send(Events {
+                                            events: vec![event],
+                                        });
+                                    }),
+                            )
+                    })
+                    .map(|_| ())
+            })
+            .map_err(|e| FrontendError::from(e.context(FrontendErrorKind::Verification)))
     }
 
     fn lookup_event(
@@ -136,58 +144,66 @@ impl EventActor {
             .map_err(|e| FrontendError::from(e.context(FrontendErrorKind::Verification)))
     }
 
-    fn edit_event(&mut self, event: FrontendEvent, id: String) {
+    fn edit_event(
+        &mut self,
+        event: FrontendEvent,
+        id: String,
+    ) -> impl Future<Item = (), Error = FrontendError> {
         debug!("Got event: {:?}", event);
 
-        if let Some(index) = id.rfind('=') {
-            let (base64d, eel_id) = id.split_at(index);
-            let base64d = base64d.to_owned();
-            let eel_id = eel_id.trim_left_matches('=');
+        let database = self.db.clone();
+        let db = self.db.clone();
+        let tg = self.tg.clone();
+        let timer = self.timer.clone();
 
-            if let Ok(eel_id) = eel_id.parse::<i32>() {
-                let database = self.db.clone();
+        id.rfind('=')
+            .ok_or(EventError::from(EventErrorKind::Secret))
+            .and_then(move |index| {
+                let (base64d, eel_id) = id.split_at(index);
+                let base64d = base64d.to_owned();
+                let eel_id = eel_id.trim_left_matches('=');
 
-                let tg = self.tg.clone();
-                let timer = self.timer.clone();
-
-                Arbiter::handle().spawn(
-                    self.db
-                        .call_fut(LookupEditEventLink(eel_id))
-                        .then(flatten::<LookupEditEventLink>)
-                        .and_then(move |eel| match verify_secret(&base64d, eel.secret()) {
-                            Ok(b) => if b {
-                                Ok(eel)
-                            } else {
-                                Err(EventError::from(EventErrorKind::Frontend))
-                            },
-                            Err(e) => Err(EventError::from(e.context(EventErrorKind::Frontend))),
-                        })
-                        .and_then(move |eel| {
-                            database
-                                .call_fut(DeleteEditEventLink { id: eel.id() })
-                                .then(flatten::<DeleteEditEventLink>)
-                                .join(
-                                    database
-                                        .call_fut(EditEvent {
-                                            id: eel.event_id(),
-                                            system_id: eel.system_id(),
-                                            title: event.title().to_owned(),
-                                            description: event.description().to_owned(),
-                                            start_date: event.start_date(),
-                                            end_date: event.end_date(),
-                                            hosts: vec![eel.user_id()],
-                                        })
-                                        .then(flatten::<NewEvent>)
-                                        .map(move |event| {
-                                            tg.send(TgUpdateEvent(event.clone()));
-                                            timer.send(UpdateEvent { event });
-                                        }),
-                                )
-                        })
-                        .map(|_| ())
-                        .map_err(|e| error!("Error: {:?}", e)),
-                )
-            }
-        }
+                eel_id
+                    .parse::<i32>()
+                    .map_err(|_| EventError::from(EventErrorKind::Secret))
+                    .map(|eel_id| (eel_id, base64d))
+            })
+            .into_future()
+            .and_then(move |(eel_id, base64d)| {
+                db.call_fut(LookupEditEventLink(eel_id))
+                    .then(flatten::<LookupEditEventLink>)
+                    .and_then(move |eel| match verify_secret(&base64d, eel.secret()) {
+                        Ok(b) => if b {
+                            Ok(eel)
+                        } else {
+                            Err(EventError::from(EventErrorKind::Frontend))
+                        },
+                        Err(e) => Err(EventError::from(e.context(EventErrorKind::Frontend))),
+                    })
+                    .and_then(move |eel| {
+                        database
+                            .call_fut(DeleteEditEventLink { id: eel.id() })
+                            .then(flatten::<DeleteEditEventLink>)
+                            .join(
+                                database
+                                    .call_fut(EditEvent {
+                                        id: eel.event_id(),
+                                        system_id: eel.system_id(),
+                                        title: event.title().to_owned(),
+                                        description: event.description().to_owned(),
+                                        start_date: event.start_date(),
+                                        end_date: event.end_date(),
+                                        hosts: vec![eel.user_id()],
+                                    })
+                                    .then(flatten::<NewEvent>)
+                                    .map(move |event| {
+                                        tg.send(TgUpdateEvent(event.clone()));
+                                        timer.send(UpdateEvent { event });
+                                    }),
+                            )
+                    })
+                    .map(|_| ())
+            })
+            .map_err(|e| FrontendError::from(e.context(FrontendErrorKind::Verification)))
     }
 }
