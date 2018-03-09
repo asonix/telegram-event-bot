@@ -213,7 +213,7 @@ impl Timer {
                 let ending_soon = now + OldDuration::hours(1) > end;
                 let should_have_started = now > start;
                 let starting_soon = now + OldDuration::minutes(45) > start;
-                let should_drop = now - OldDuration::hours(1) > start;
+                let should_drop = now + OldDuration::hours(1) < start;
 
                 if should_have_ended {
                     debug!("Should have ended");
