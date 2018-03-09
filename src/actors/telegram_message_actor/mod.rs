@@ -18,7 +18,7 @@ use actors::db_broker::DbBroker;
 use actors::telegram_actor::{CallbackQueryMessage, TelegramActor};
 use actors::telegram_actor::messages::{AskChats, AskDeleteEvents, AskEvents, CreatedChannel,
                                        EventDeleted, IsAdmin, Linked, PrintId, SendError,
-                                       SendEvents, SendUrl};
+                                       SendEvents, SendHelp, SendUrl};
 use actors::users_actor::{DeleteState, UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
 use error::EventErrorKind;
@@ -237,6 +237,11 @@ impl TelegramMessageActor {
                                 .map_err(|e| error!("Error: {:?}", e)),
                         )
                     }
+                } else if text.starts_with("/help")
+                    || (text.starts_with("/start") && message.chat.kind == "private")
+                {
+                    debug!("help | start + private");
+                    self.tg.send(SendHelp(message.chat.id));
                 } else {
                     debug!("else");
                     if message.chat.kind == "group" || message.chat.kind == "supergroup" {

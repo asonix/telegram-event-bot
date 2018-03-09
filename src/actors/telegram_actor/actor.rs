@@ -8,6 +8,14 @@ impl Actor for TelegramActor {
     type Context = Context<Self>;
 }
 
+impl Handler<SendHelp> for TelegramActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendHelp, _: &mut Self::Context) -> Self::Result {
+        self.send_help(msg.0);
+    }
+}
+
 impl Handler<SendError> for TelegramActor {
     type Result = ();
 

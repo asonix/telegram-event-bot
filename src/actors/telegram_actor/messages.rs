@@ -6,6 +6,14 @@ use telebot::objects::Integer;
 use error::EventError;
 use models::event::Event;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SendHelp(pub Integer);
+
+impl ResponseType for SendHelp {
+    type Item = ();
+    type Error = ();
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SendError(pub Integer, pub &'static str);
 

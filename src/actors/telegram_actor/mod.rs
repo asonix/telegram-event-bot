@@ -46,6 +46,26 @@ impl TelegramActor {
         TelegramActor { bot, db }
     }
 
+    fn send_help(&self, chat_id: Integer) {
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(
+                    chat_id,
+                    "/init - Initialize an event channel
+/link - link a group chat with an event channel (usage: /link [chat_id])
+/id - get the id of a group chat
+/new - Create a new event (in a private chat with the bot)
+/edit - Edit an event you're hosting (in a private chat with the bot)
+/delete - Delete an event you're hosting (in a private chat with the bot)
+/help - Print this help message"
+                        .to_owned(),
+                )
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
     fn send_error(&self, chat_id: Integer, error: &str) {
         self.bot.inner.handle.spawn(
             self.bot
