@@ -12,6 +12,7 @@ pub enum UserState {
     NewUser,
     NewRelation,
     KnownRelation,
+    InvalidQuery,
 }
 
 pub enum DeleteState {
@@ -24,6 +25,7 @@ pub struct UsersActor {
     users: HashMap<Integer, HashSet<Integer>>,
     // maps channel_id to HashSet<ChatId>
     channels: HashMap<Integer, HashSet<Integer>>,
+    chats: HashSet<Integer>,
     db: Address<DbBroker>,
 }
 
@@ -32,11 +34,16 @@ impl UsersActor {
         UsersActor {
             users: HashMap::new(),
             channels: HashMap::new(),
+            chats: HashSet::new(),
             db: db,
         }
     }
 
     fn touch_user(&mut self, user_id: Integer, chat_id: Integer) -> UserState {
+        if !self.chats.contains(&chat_id) {
+            return UserState::InvalidQuery;
+        }
+
         let exists = self.users.contains_key(&user_id);
 
         if exists {
@@ -59,6 +66,8 @@ impl UsersActor {
     }
 
     fn touch_channel(&mut self, channel_id: Integer, chat_id: Integer) {
+        self.chats.insert(chat_id);
+
         self.channels
             .entry(channel_id)
             .or_insert(HashSet::new())
