@@ -84,7 +84,7 @@ fn main() {
 
     let msg_actor_bot = RcBot::new(Arbiter::handle().clone(), &bot_token);
 
-    event_web::start(sync_event_actor, "127.0.0.1:8000", None);
+    event_web::start(sync_event_actor, "0.0.0.0:8000", None);
 
     let tma: Address<_> = Supervisor::start(|_| {
         TelegramMessageActor::new(url(), msg_actor_bot, db_broker, tg, users_actor)

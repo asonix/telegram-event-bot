@@ -38,7 +38,7 @@ impl Handler<LookupEvent> for MyHandler {
 fn main() {
     let sys = System::new("womp");
 
-    event_web::start(MyHandler.start(), "127.0.0.1:8000", None);
+    event_web::start(MyHandler.start(), "0.0.0.0:8000", None);
 
     sys.run();
 }
