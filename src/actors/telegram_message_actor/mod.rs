@@ -17,7 +17,8 @@ use actors::db_actor::messages::{DeleteEvent, DeleteUserByUserId, LookupEvent,
 use actors::db_broker::DbBroker;
 use actors::telegram_actor::{CallbackQueryMessage, TelegramActor};
 use actors::telegram_actor::messages::{AskChats, AskDeleteEvents, AskEvents, CreatedChannel,
-                                       EventDeleted, IsAdmin, Linked, PrintId, SendEvents, SendUrl};
+                                       EventDeleted, IsAdmin, Linked, PrintId, SendError,
+                                       SendEvents, SendUrl};
 use actors::users_actor::{DeleteState, UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
 use error::EventErrorKind;
@@ -145,7 +146,16 @@ impl TelegramMessageActor {
                             self.users
                                 .call_fut(LookupChannels(user.id))
                                 .then(flatten::<LookupChannels>)
-                                .map(move |chats| tg.send(AskChats(chats, chat_id)))
+                                .then(move |chats| match chats {
+                                    Ok(chats) => Ok(tg.send(AskChats(chats, chat_id))),
+                                    Err(e) => {
+                                        tg.send(SendError(
+                                            chat_id,
+                                            "Failed to get event channnels for user",
+                                        ));
+                                        Err(e)
+                                    }
+                                })
                                 .map_err(|e| error!("Error: {:?}", e)),
                         );
                     }
@@ -160,7 +170,16 @@ impl TelegramMessageActor {
                             self.db
                                 .call_fut(LookupEventsByUserId { user_id: user.id })
                                 .then(flatten::<LookupEventsByUserId>)
-                                .map(move |events| tg.send(AskEvents(events, chat_id)))
+                                .then(move |events| match events {
+                                    Ok(events) => Ok(tg.send(AskEvents(events, chat_id))),
+                                    Err(e) => {
+                                        tg.send(SendError(
+                                            chat_id,
+                                            "Failed to get events for user",
+                                        ));
+                                        Err(e)
+                                    }
+                                })
                                 .map_err(|e| error!("Error: {:?}", e)),
                         );
                     }
@@ -175,7 +194,16 @@ impl TelegramMessageActor {
                             self.db
                                 .call_fut(LookupEventsByUserId { user_id: user.id })
                                 .then(flatten::<LookupEventsByUserId>)
-                                .map(move |events| tg.send(AskDeleteEvents(events, chat_id)))
+                                .then(move |events| match events {
+                                    Ok(events) => Ok(tg.send(AskDeleteEvents(events, chat_id))),
+                                    Err(e) => {
+                                        tg.send(SendError(
+                                            chat_id,
+                                            "Failed to get events for user",
+                                        ));
+                                        Err(e)
+                                    }
+                                })
                                 .map_err(|e| error!("Error: {:?}", e)),
                         );
                     }
@@ -199,8 +227,12 @@ impl TelegramMessageActor {
                             self.db
                                 .call_fut(LookupEventsByChatId { chat_id })
                                 .then(flatten::<LookupEventsByChatId>)
-                                .map(move |events| {
-                                    tg.send(SendEvents(chat_id, events));
+                                .then(move |events| match events {
+                                    Ok(events) => Ok(tg.send(SendEvents(chat_id, events))),
+                                    Err(e) => {
+                                        tg.send(SendError(chat_id, "Failed to fetch events"));
+                                        Err(e)
+                                    }
                                 })
                                 .map_err(|e| error!("Error: {:?}", e)),
                         )
@@ -357,8 +389,8 @@ impl TelegramMessageActor {
                                                         }).then(flatten::<StoreEventLink>)
                                                     })
                                             })
-                                            .map(move |nel| {
-                                                tg.send(SendUrl(
+                                            .then(move |nel| match nel {
+                                                Ok(nel) => Ok(tg.send(SendUrl(
                                                     chat_id,
                                                     "create".to_owned(),
                                                     format!(
@@ -367,7 +399,14 @@ impl TelegramMessageActor {
                                                         base64d,
                                                         nel.id()
                                                     ),
-                                                ))
+                                                ))),
+                                                Err(e) => {
+                                                    tg.send(SendError(
+                                                        chat_id,
+                                                        "Failed to generate new event link",
+                                                    ));
+                                                    Err(e)
+                                                }
                                             })
                                             .map_err(|e| error!("Error: {:?}", e)),
                                     );
@@ -402,8 +441,8 @@ impl TelegramMessageActor {
                                                     secret,
                                                 }).then(flatten::<StoreEditEventLink>)
                                             })
-                                            .map(move |eel| {
-                                                tg.send(SendUrl(
+                                            .then(move |eel| match eel {
+                                                Ok(eel) => Ok(tg.send(SendUrl(
                                                     chat_id,
                                                     "update".to_owned(),
                                                     format!(
@@ -412,7 +451,14 @@ impl TelegramMessageActor {
                                                         base64d,
                                                         eel.id()
                                                     ),
-                                                ))
+                                                ))),
+                                                Err(e) => {
+                                                    tg.send(SendError(
+                                                        chat_id,
+                                                        "Unable to generate edit link",
+                                                    ));
+                                                    Err(e)
+                                                }
                                             })
                                             .map_err(|e| error!("Error: {:?}", e)),
                                     );
@@ -429,12 +475,19 @@ impl TelegramMessageActor {
                                             db.call_fut(LookupSystem { system_id })
                                                 .then(flatten::<LookupSystem>)
                                         })
-                                        .map(move |chat_system| {
-                                            tg.send(EventDeleted(
+                                        .then(move |chat_system| match chat_system {
+                                            Ok(chat_system) => Ok(tg.send(EventDeleted(
                                                 chat_id,
                                                 chat_system.events_channel(),
                                                 title,
-                                            ))
+                                            ))),
+                                            Err(e) => {
+                                                tg.send(SendError(
+                                                    chat_id,
+                                                    "Failed to delete event",
+                                                ));
+                                                Err(e)
+                                            }
                                         })
                                         .map_err(|e| error!("Error: {:?}", e)),
                                 ),

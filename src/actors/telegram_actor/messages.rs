@@ -7,6 +7,14 @@ use error::EventError;
 use models::event::Event;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SendError(pub Integer, pub &'static str);
+
+impl ResponseType for SendError {
+    type Item = ();
+    type Error = ();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventSoon(pub Event);
 
 impl ResponseType for EventSoon {

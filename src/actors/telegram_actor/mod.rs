@@ -46,6 +46,16 @@ impl TelegramActor {
         TelegramActor { bot, db }
     }
 
+    fn send_error(&self, chat_id: Integer, error: &str) {
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(chat_id, error.to_owned())
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
     fn event_soon(&self, event: Event) {
         let bot = self.bot.clone();
 

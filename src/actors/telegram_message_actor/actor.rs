@@ -102,7 +102,7 @@ fn bot_stream(bot: RcBot) -> impl Stream<Item = (RcBot, Update), Error = EventEr
                     if let Some(msg) = update.message {
                         sender
                             .unbounded_send((bot.clone(), msg))
-                            .unwrap_or_else(|e| error!("Error: {}", e));
+                            .unwrap_or_else(|e| error!("Error: {:?}", e));
                     }
                 }
                 return None;
