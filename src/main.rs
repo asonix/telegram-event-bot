@@ -87,7 +87,7 @@ fn main() {
     event_web::start(sync_event_actor, "0.0.0.0:8000", None);
 
     let tma: Address<_> = Supervisor::start(|_| {
-        TelegramMessageActor::new(url(), msg_actor_bot, db_broker, tg, users_actor)
+        TelegramMessageActor::new(url(), msg_actor_bot.timeout(30), db_broker, tg, users_actor)
     });
 
     tma.send(StartStreaming);
