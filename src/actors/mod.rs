@@ -1,4 +1,3 @@
-pub mod db_actor;
 pub mod db_broker;
 pub mod event_actor;
 pub mod telegram_actor;

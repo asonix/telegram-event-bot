@@ -5,7 +5,7 @@ use failure::Fail;
 use futures::{Future, IntoFuture};
 
 use actors::db_broker::DbBroker;
-use actors::db_actor::messages::{DeleteEditEventLink, DeleteEventLink, EditEvent,
+use actors::db_broker::messages::{DeleteEditEventLink, DeleteEventLink, EditEvent,
                                  LookupEditEventLink, LookupEvent, LookupEventLink, NewEvent};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{NewEvent as TgNewEvent, UpdateEvent as TgUpdateEvent};

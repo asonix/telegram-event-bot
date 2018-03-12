@@ -63,8 +63,6 @@ pub enum EventErrorKind {
     Transaction,
     #[fail(display = "No hosts present")]
     Hosts,
-    #[fail(display = "No connection in DbActor")]
-    MissingConnection,
     #[fail(display = "Failed passing message")]
     Canceled,
     #[fail(display = "Failed to send telegram message")]

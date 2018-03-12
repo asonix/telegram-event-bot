@@ -7,7 +7,7 @@ use chrono_tz::Tz;
 use futures::Future;
 
 use actors::db_broker::DbBroker;
-use actors::db_actor::messages::{DeleteEvent, GetEventsInRange};
+use actors::db_broker::messages::{DeleteEvent, GetEventsInRange};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{EventOver, EventSoon, EventStarted};
 use error::EventError;

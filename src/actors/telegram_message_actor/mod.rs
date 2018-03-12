@@ -9,8 +9,7 @@ use rand::os::OsRng;
 use serde_json;
 
 use ENCODING_ALPHABET;
-use actors::db_actor::messages::{StoreEditEventLink, StoreEventLink};
-use actors::db_actor::messages::{DeleteEvent, DeleteUserByUserId, LookupEvent,
+use actors::db_broker::messages::{StoreEditEventLink, StoreEventLink, DeleteEvent, DeleteUserByUserId, LookupEvent,
                                  LookupEventsByChatId, LookupEventsByUserId, LookupSystem,
                                  LookupSystemByChannel, LookupUser, NewChannel, NewChat,
                                  NewRelation, NewUser, RemoveUserChat};

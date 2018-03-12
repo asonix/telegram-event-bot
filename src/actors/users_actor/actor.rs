@@ -6,7 +6,7 @@ use futures::stream::iter_ok;
 use telebot::objects::Integer;
 
 use error::EventError;
-use actors::db_actor::messages::{GetSystemsWithChats, GetUsersWithChats};
+use actors::db_broker::messages::{GetSystemsWithChats, GetUsersWithChats};
 use models::user::User;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;

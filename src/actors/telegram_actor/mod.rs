@@ -12,7 +12,7 @@ use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, Functio
 use telebot::objects::{InlineKeyboardButton, InlineKeyboardMarkup, Integer};
 
 use actors::db_broker::DbBroker;
-use actors::db_actor::messages::{GetChatSystemByEventId, GetEventsForSystem, LookupSystem};
+use actors::db_broker::messages::{GetChatSystemByEventId, GetEventsForSystem, LookupSystem};
 use error::{EventError, EventErrorKind};
 use models::chat_system::ChatSystem;
 use models::event::Event;
