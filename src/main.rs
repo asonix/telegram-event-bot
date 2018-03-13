@@ -79,15 +79,14 @@ fn main() {
 
     let timer: Address<_> = Timer::new(db_broker.clone(), tg.clone()).start();
 
-    let sync_event_actor: SyncAddress<_> =
-        EventActor::new(tg.clone(), db_broker.clone(), timer).start();
+    let sync_event_actor: SyncAddress<_> = EventActor::new(tg, db_broker.clone(), timer).start();
 
     let msg_actor_bot = RcBot::new(Arbiter::handle().clone(), &bot_token);
 
     event_web::start(sync_event_actor, "0.0.0.0:8000", None);
 
     let tma: Address<_> = Supervisor::start(|_| {
-        TelegramMessageActor::new(url(), msg_actor_bot.timeout(30), db_broker, tg, users_actor)
+        TelegramMessageActor::new(url(), msg_actor_bot.timeout(30), db_broker, users_actor)
     });
 
     tma.send(StartStreaming);

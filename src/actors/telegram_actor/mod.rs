@@ -1,15 +1,12 @@
-use std::collections::HashSet;
 use std::fmt::Debug;
 
 use actix::Address;
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
 use chrono_tz::US::Central;
-use futures::{Future, Stream};
-use futures::stream::iter_ok;
-use serde_json;
+use futures::Future;
 use telebot::RcBot;
-use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage};
-use telebot::objects::{InlineKeyboardButton, InlineKeyboardMarkup, Integer};
+use telebot::functions::FunctionMessage;
+use telebot::objects::Integer;
 
 use actors::db_broker::DbBroker;
 use actors::db_broker::messages::{GetChatSystemByEventId, GetEventsForSystem, LookupSystem};
@@ -21,21 +18,6 @@ use util::flatten;
 mod actor;
 pub mod messages;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum CallbackQueryMessage {
-    NewEvent {
-        channel_id: Integer,
-    },
-    EditEvent {
-        event_id: i32,
-    },
-    DeleteEvent {
-        event_id: i32,
-        system_id: i32,
-        title: String,
-    },
-}
-
 pub struct TelegramActor {
     bot: RcBot,
     db: Address<DbBroker>,
@@ -44,36 +26,6 @@ pub struct TelegramActor {
 impl TelegramActor {
     pub fn new(bot: RcBot, db: Address<DbBroker>) -> Self {
         TelegramActor { bot, db }
-    }
-
-    fn send_help(&self, chat_id: Integer) {
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(
-                    chat_id,
-                    "/init - Initialize an event channel
-/link - link a group chat with an event channel (usage: /link [chat_id])
-/id - get the id of a group chat
-/new - Create a new event (in a private chat with the bot)
-/edit - Edit an event you're hosting (in a private chat with the bot)
-/delete - Delete an event you're hosting (in a private chat with the bot)
-/help - Print this help message"
-                        .to_owned(),
-                )
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        );
-    }
-
-    fn send_error(&self, chat_id: Integer, error: &str) {
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(chat_id, error.to_owned())
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        );
     }
 
     fn event_soon(&self, event: Event) {
@@ -247,212 +199,6 @@ impl TelegramActor {
             .inner
             .handle
             .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
-    }
-
-    fn ask_chats(&self, channels: HashSet<Integer>, chat_id: Integer) {
-        let bot = self.bot.clone();
-        let bot2 = bot.clone();
-
-        let fut = iter_ok(channels)
-            .and_then(move |channel_id| {
-                bot.clone()
-                    .get_chat(channel_id)
-                    .send()
-                    .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
-            })
-            .map(move |(_, channel)| {
-                debug!("Asking about channel_id: {}", channel.id);
-                InlineKeyboardButton::new(
-                    channel
-                        .title
-                        .unwrap_or(channel.username.unwrap_or("No title".to_owned())),
-                ).callback_data(
-                    serde_json::to_string(&CallbackQueryMessage::NewEvent {
-                        channel_id: channel.id,
-                    }).unwrap(),
-                )
-            })
-            .collect()
-            .and_then(move |buttons| {
-                bot2.message(
-                    chat_id,
-                    "Which channel would you like to create an event for?".to_owned(),
-                ).reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
-                    .send()
-                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
-            });
-
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
-    }
-
-    fn ask_events(&self, events: Vec<Event>, chat_id: Integer) {
-        let bot = self.bot.clone();
-        let bot2 = bot.clone();
-
-        let fut = iter_ok(events)
-            .map(|event| {
-                InlineKeyboardButton::new(event.title().to_owned()).callback_data(
-                    serde_json::to_string(&CallbackQueryMessage::EditEvent {
-                        event_id: event.id(),
-                    }).unwrap(),
-                )
-            })
-            .collect()
-            .and_then(move |buttons| {
-                bot2.message(chat_id, "Which event would you like to edit?".to_owned())
-                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
-                    .send()
-                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
-            });
-
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
-    }
-
-    fn ask_delete_events(&self, events: Vec<Event>, chat_id: Integer) {
-        let bot = self.bot.clone();
-        let bot2 = bot.clone();
-
-        let fut = iter_ok(events)
-            .map(|event| {
-                InlineKeyboardButton::new(event.title().to_owned()).callback_data(
-                    serde_json::to_string(&CallbackQueryMessage::DeleteEvent {
-                        event_id: event.id(),
-                        system_id: event.system_id(),
-                        title: event.title().to_owned(),
-                    }).unwrap(),
-                )
-            })
-            .collect()
-            .and_then(move |buttons| {
-                bot2.message(chat_id, "Which event would you like to delete?".to_owned())
-                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
-                    .send()
-                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
-            });
-
-        self.bot
-            .inner
-            .handle
-            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
-    }
-
-    fn event_deleted(&mut self, chat_id: Integer, channel_id: Integer, title: String) {
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(chat_id, "Deleted event!".to_owned())
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        );
-
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(channel_id, format!("Event deleted: {}", title))
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        );
-    }
-
-    fn is_admin(
-        &mut self,
-        channel_id: Integer,
-        chat_ids: Vec<Integer>,
-    ) -> impl Future<Item = Vec<Integer>, Error = EventError> {
-        self.bot
-            .unban_chat_administrators(channel_id)
-            .send()
-            .map_err(|e| EventError::from(e.context(EventErrorKind::TelegramLookup)))
-            .and_then(move |(bot, admins)| {
-                let channel_admins = admins
-                    .into_iter()
-                    .map(|admin| admin.user.id)
-                    .collect::<HashSet<_>>();
-
-                iter_ok(chat_ids)
-                    .and_then(move |chat_id| {
-                        bot.unban_chat_administrators(chat_id)
-                            .send()
-                            .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
-                            .map(move |(bot, admins)| (bot, admins, chat_id))
-                    })
-                    .filter_map(move |(_, admins, chat_id)| {
-                        if admins
-                            .into_iter()
-                            .any(|admin| channel_admins.contains(&admin.user.id))
-                        {
-                            Some(chat_id)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            })
-    }
-
-    fn linked(&mut self, channel_id: Integer, chat_ids: Vec<Integer>) {
-        let msg = format!(
-            "Linked channel '{}' to chats ({})",
-            channel_id,
-            chat_ids
-                .into_iter()
-                .map(|id| format!("{}", id))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(channel_id, msg)
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        );
-    }
-
-    fn print_id(&mut self, chat_id: Integer) {
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(chat_id, format!("{}", chat_id))
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        );
-    }
-
-    fn created_channel(&mut self, chat_id: Integer) {
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(chat_id, format!("Initialized"))
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        );
-    }
-
-    fn send_url(&mut self, chat_id: Integer, action: String, url: String) {
-        self.bot.inner.handle.spawn(
-            self.bot
-                .message(
-                    chat_id,
-                    format!("Use this link to {} your event: {}", action, url),
-                )
-                .send()
-                .map(|_| ())
-                .map_err(|e| error!("Error: {:?}", e)),
-        )
-    }
-
-    fn send_events(&mut self, chat_id: Integer, events: Vec<Event>) {
-        self.bot.inner.handle.spawn(
-            print_events(self.bot.clone(), chat_id, events).map_err(|e| error!("Error: {:?}", e)),
-        );
     }
 }
 

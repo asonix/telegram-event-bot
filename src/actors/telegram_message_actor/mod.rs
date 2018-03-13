@@ -1,12 +1,20 @@
+use std::fmt::Debug;
+use std::collections::HashSet;
+
 use actix::{Address, Arbiter};
-use futures::Future;
-use telebot::objects::{CallbackQuery, Integer, Message, Update};
+use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
+use chrono_tz::US::Central;
+use futures::{Future, Stream};
+use futures::stream::iter_ok;
+use telebot::objects::{CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Integer,
+                       Message, Update};
 use telebot::RcBot;
 use base_x::encode;
 use event_web::generate_secret;
 use rand::Rng;
 use rand::os::OsRng;
 use serde_json;
+use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage};
 
 use ENCODING_ALPHABET;
 use actors::db_broker::messages::{DeleteEvent, DeleteUserByUserId, LookupEvent,
@@ -15,13 +23,10 @@ use actors::db_broker::messages::{DeleteEvent, DeleteUserByUserId, LookupEvent,
                                   NewRelation, NewUser, RemoveUserChat, StoreEditEventLink,
                                   StoreEventLink};
 use actors::db_broker::DbBroker;
-use actors::telegram_actor::{CallbackQueryMessage, TelegramActor};
-use actors::telegram_actor::messages::{AskChats, AskDeleteEvents, AskEvents, CreatedChannel,
-                                       EventDeleted, IsAdmin, Linked, PrintId, SendError,
-                                       SendEvents, SendHelp, SendUrl};
 use actors::users_actor::{DeleteState, UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
-use error::EventErrorKind;
+use error::{EventError, EventErrorKind};
+use models::event::Event;
 use util::flatten;
 
 mod actor;
@@ -29,27 +34,34 @@ mod messages;
 
 pub use self::messages::StartStreaming;
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum CallbackQueryMessage {
+    NewEvent {
+        channel_id: Integer,
+    },
+    EditEvent {
+        event_id: i32,
+    },
+    DeleteEvent {
+        event_id: i32,
+        system_id: i32,
+        title: String,
+    },
+}
+
 pub struct TelegramMessageActor {
     url: String,
     bot: RcBot,
     db: Address<DbBroker>,
-    tg: Address<TelegramActor>,
     users: Address<UsersActor>,
 }
 
 impl TelegramMessageActor {
-    pub fn new(
-        url: String,
-        bot: RcBot,
-        db: Address<DbBroker>,
-        tg: Address<TelegramActor>,
-        users: Address<UsersActor>,
-    ) -> Self {
+    pub fn new(url: String, bot: RcBot, db: Address<DbBroker>, users: Address<UsersActor>) -> Self {
         TelegramMessageActor {
             url,
             bot,
             db,
-            tg,
             users,
         }
     }
@@ -139,7 +151,7 @@ impl TelegramMessageActor {
                     debug!("new");
                     if message.chat.kind == "private" {
                         debug!("private");
-                        let tg = self.tg.clone();
+                        let bot = self.bot.clone();
                         let chat_id = message.chat.id;
 
                         Arbiter::handle().spawn(
@@ -147,12 +159,15 @@ impl TelegramMessageActor {
                                 .call_fut(LookupChannels(user.id))
                                 .then(flatten::<LookupChannels>)
                                 .then(move |chats| match chats {
-                                    Ok(chats) => Ok(tg.send(AskChats(chats, chat_id))),
+                                    Ok(chats) => {
+                                        Ok(TelegramMessageActor::ask_chats(bot, chats, chat_id))
+                                    }
                                     Err(e) => {
-                                        tg.send(SendError(
+                                        TelegramMessageActor::send_error(
+                                            bot,
                                             chat_id,
                                             "Failed to get event channnels for user",
-                                        ));
+                                        );
                                         Err(e)
                                     }
                                 })
@@ -163,7 +178,7 @@ impl TelegramMessageActor {
                     debug!("edit");
                     if message.chat.kind == "private" {
                         debug!("private");
-                        let tg = self.tg.clone();
+                        let bot = self.bot.clone();
                         let chat_id = message.chat.id;
 
                         Arbiter::handle().spawn(
@@ -171,12 +186,15 @@ impl TelegramMessageActor {
                                 .call_fut(LookupEventsByUserId { user_id: user.id })
                                 .then(flatten::<LookupEventsByUserId>)
                                 .then(move |events| match events {
-                                    Ok(events) => Ok(tg.send(AskEvents(events, chat_id))),
+                                    Ok(events) => {
+                                        Ok(TelegramMessageActor::ask_events(bot, events, chat_id))
+                                    }
                                     Err(e) => {
-                                        tg.send(SendError(
+                                        TelegramMessageActor::send_error(
+                                            bot,
                                             chat_id,
                                             "Failed to get events for user",
-                                        ));
+                                        );
                                         Err(e)
                                     }
                                 })
@@ -187,7 +205,7 @@ impl TelegramMessageActor {
                     debug!("delete");
                     if message.chat.kind == "private" {
                         debug!("private");
-                        let tg = self.tg.clone();
+                        let bot = self.bot.clone();
                         let chat_id = message.chat.id;
 
                         Arbiter::handle().spawn(
@@ -195,12 +213,17 @@ impl TelegramMessageActor {
                                 .call_fut(LookupEventsByUserId { user_id: user.id })
                                 .then(flatten::<LookupEventsByUserId>)
                                 .then(move |events| match events {
-                                    Ok(events) => Ok(tg.send(AskDeleteEvents(events, chat_id))),
+                                    Ok(events) => Ok(TelegramMessageActor::ask_delete_events(
+                                        bot,
+                                        events,
+                                        chat_id,
+                                    )),
                                     Err(e) => {
-                                        tg.send(SendError(
+                                        TelegramMessageActor::send_error(
+                                            bot,
                                             chat_id,
                                             "Failed to get events for user",
-                                        ));
+                                        );
                                         Err(e)
                                     }
                                 })
@@ -213,14 +236,13 @@ impl TelegramMessageActor {
                         debug!("group | supergroup");
                         let chat_id = message.chat.id;
 
-                        self.tg.send(PrintId(chat_id));
+                        TelegramMessageActor::print_id(self.bot.clone(), chat_id);
                     }
                 } else if text.starts_with("/events") {
                     debug!("events");
                     if message.chat.kind == "group" || message.chat.kind == "supergroup" {
                         debug!("group | supergroup");
-                        let tg = self.tg.clone();
-
+                        let bot = self.bot.clone();
                         let chat_id = message.chat.id;
 
                         Arbiter::handle().spawn(
@@ -228,9 +250,15 @@ impl TelegramMessageActor {
                                 .call_fut(LookupEventsByChatId { chat_id })
                                 .then(flatten::<LookupEventsByChatId>)
                                 .then(move |events| match events {
-                                    Ok(events) => Ok(tg.send(SendEvents(chat_id, events))),
+                                    Ok(events) => {
+                                        Ok(TelegramMessageActor::send_events(bot, chat_id, events))
+                                    }
                                     Err(e) => {
-                                        tg.send(SendError(chat_id, "Failed to fetch events"));
+                                        TelegramMessageActor::send_error(
+                                            bot,
+                                            chat_id,
+                                            "Failed to fetch events",
+                                        );
                                         Err(e)
                                     }
                                 })
@@ -241,7 +269,7 @@ impl TelegramMessageActor {
                     || (text.starts_with("/start") && message.chat.kind == "private")
                 {
                     debug!("help | start + private");
-                    self.tg.send(SendHelp(message.chat.id));
+                    self.send_help(message.chat.id);
                 } else {
                     debug!("else");
                     if message.chat.kind == "group" || message.chat.kind == "supergroup" {
@@ -288,7 +316,7 @@ impl TelegramMessageActor {
                 if message.chat.kind == "channel" {
                     debug!("channel");
                     let db = self.db.clone();
-                    let tg = self.tg.clone();
+                    let bot = self.bot.clone();
                     let channel_id = message.chat.id;
 
                     let chat_ids = text.trim_left_matches("/link")
@@ -303,9 +331,7 @@ impl TelegramMessageActor {
                         .collect();
 
                     Arbiter::handle().spawn(
-                        self.tg
-                            .call_fut(IsAdmin(channel_id, chat_ids))
-                            .then(flatten::<IsAdmin>)
+                        self.is_admin(channel_id, chat_ids)
                             .and_then(move |chat_ids| {
                                 for chat_id in chat_ids.iter() {
                                     db.send(NewChat {
@@ -314,7 +340,7 @@ impl TelegramMessageActor {
                                     });
                                 }
 
-                                tg.send(Linked(channel_id, chat_ids));
+                                TelegramMessageActor::linked(bot, channel_id, chat_ids);
                                 Ok(())
                             })
                             .map_err(|e| error!("Error: {:?}", e)),
@@ -325,13 +351,15 @@ impl TelegramMessageActor {
                 if message.chat.kind == "channel" {
                     debug!("channel");
                     let channel_id = message.chat.id;
-                    let tg = self.tg.clone();
+                    let bot = self.bot.clone();
 
                     Arbiter::handle().spawn(
                         self.db
                             .call_fut(NewChannel { channel_id })
                             .then(flatten::<NewChannel>)
-                            .map(move |_chat_system| tg.send(CreatedChannel(channel_id)))
+                            .map(move |_chat_system| {
+                                TelegramMessageActor::created_channel(bot, channel_id)
+                            })
                             .map_err(|e| error!("Error: {:?}", e)),
                     );
                 }
@@ -358,7 +386,7 @@ impl TelegramMessageActor {
                         if let Ok(secret) = generate_secret(&base64d) {
                             let db = self.db.clone();
                             let db2 = self.db.clone();
-                            let tg = self.tg.clone();
+                            let bot = self.bot.clone();
                             let users = self.users.clone();
 
                             let url = self.url.clone();
@@ -395,7 +423,8 @@ impl TelegramMessageActor {
                                                     })
                                             })
                                             .then(move |nel| match nel {
-                                                Ok(nel) => Ok(tg.send(SendUrl(
+                                                Ok(nel) => Ok(TelegramMessageActor::send_url(
+                                                    bot,
                                                     chat_id,
                                                     "create".to_owned(),
                                                     format!(
@@ -404,12 +433,13 @@ impl TelegramMessageActor {
                                                         base64d,
                                                         nel.id()
                                                     ),
-                                                ))),
+                                                )),
                                                 Err(e) => {
-                                                    tg.send(SendError(
+                                                    TelegramMessageActor::send_error(
+                                                        bot,
                                                         chat_id,
                                                         "Failed to generate new event link",
-                                                    ));
+                                                    );
                                                     Err(e)
                                                 }
                                             })
@@ -447,7 +477,8 @@ impl TelegramMessageActor {
                                                 }).then(flatten::<StoreEditEventLink>)
                                             })
                                             .then(move |eel| match eel {
-                                                Ok(eel) => Ok(tg.send(SendUrl(
+                                                Ok(eel) => Ok(TelegramMessageActor::send_url(
+                                                    bot,
                                                     chat_id,
                                                     "update".to_owned(),
                                                     format!(
@@ -456,12 +487,13 @@ impl TelegramMessageActor {
                                                         base64d,
                                                         eel.id()
                                                     ),
-                                                ))),
+                                                )),
                                                 Err(e) => {
-                                                    tg.send(SendError(
+                                                    TelegramMessageActor::send_error(
+                                                        bot,
                                                         chat_id,
                                                         "Unable to generate edit link",
-                                                    ));
+                                                    );
                                                     Err(e)
                                                 }
                                             })
@@ -481,16 +513,20 @@ impl TelegramMessageActor {
                                                 .then(flatten::<LookupSystem>)
                                         })
                                         .then(move |chat_system| match chat_system {
-                                            Ok(chat_system) => Ok(tg.send(EventDeleted(
-                                                chat_id,
-                                                chat_system.events_channel(),
-                                                title,
-                                            ))),
+                                            Ok(chat_system) => {
+                                                Ok(TelegramMessageActor::event_deleted(
+                                                    bot,
+                                                    chat_id,
+                                                    chat_system.events_channel(),
+                                                    title,
+                                                ))
+                                            }
                                             Err(e) => {
-                                                tg.send(SendError(
+                                                TelegramMessageActor::send_error(
+                                                    bot,
                                                     chat_id,
                                                     "Failed to delete event",
-                                                ));
+                                                );
                                                 Err(e)
                                             }
                                         })
@@ -503,4 +539,343 @@ impl TelegramMessageActor {
             }
         }
     }
+
+    fn ask_chats(bot: RcBot, channels: HashSet<Integer>, chat_id: Integer) {
+        let bot2 = bot.clone();
+        let bot3 = bot.clone();
+
+        let fut = iter_ok(channels)
+            .and_then(move |channel_id| {
+                bot.clone()
+                    .get_chat(channel_id)
+                    .send()
+                    .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
+            })
+            .map(move |(_, channel)| {
+                debug!("Asking about channel_id: {}", channel.id);
+                InlineKeyboardButton::new(
+                    channel
+                        .title
+                        .unwrap_or(channel.username.unwrap_or("No title".to_owned())),
+                ).callback_data(
+                    serde_json::to_string(&CallbackQueryMessage::NewEvent {
+                        channel_id: channel.id,
+                    }).unwrap(),
+                )
+            })
+            .collect()
+            .and_then(move |buttons| {
+                bot2.message(
+                    chat_id,
+                    "Which channel would you like to create an event for?".to_owned(),
+                ).reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                    .send()
+                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
+            });
+
+        bot3.inner
+            .handle
+            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+    }
+
+    fn ask_delete_events(bot: RcBot, events: Vec<Event>, chat_id: Integer) {
+        let bot2 = bot.clone();
+
+        let fut = iter_ok(events)
+            .map(|event| {
+                InlineKeyboardButton::new(event.title().to_owned()).callback_data(
+                    serde_json::to_string(&CallbackQueryMessage::DeleteEvent {
+                        event_id: event.id(),
+                        system_id: event.system_id(),
+                        title: event.title().to_owned(),
+                    }).unwrap(),
+                )
+            })
+            .collect()
+            .and_then(move |buttons| {
+                bot2.message(chat_id, "Which event would you like to delete?".to_owned())
+                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                    .send()
+                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
+            });
+
+        bot.inner
+            .handle
+            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+    }
+
+    fn ask_events(bot: RcBot, events: Vec<Event>, chat_id: Integer) {
+        let bot2 = bot.clone();
+
+        let fut = iter_ok(events)
+            .map(|event| {
+                InlineKeyboardButton::new(event.title().to_owned()).callback_data(
+                    serde_json::to_string(&CallbackQueryMessage::EditEvent {
+                        event_id: event.id(),
+                    }).unwrap(),
+                )
+            })
+            .collect()
+            .and_then(move |buttons| {
+                bot2.message(chat_id, "Which event would you like to edit?".to_owned())
+                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                    .send()
+                    .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
+            });
+
+        bot.inner
+            .handle
+            .spawn(fut.map(|_| ()).map_err(|e| error!("Error: {:?}", e)));
+    }
+
+    fn event_deleted(bot: RcBot, chat_id: Integer, channel_id: Integer, title: String) {
+        bot.inner.handle.spawn(
+            bot.message(chat_id, "Deleted event!".to_owned())
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+
+        bot.inner.handle.spawn(
+            bot.message(channel_id, format!("Event deleted: {}", title))
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn is_admin(
+        &self,
+        channel_id: Integer,
+        chat_ids: Vec<Integer>,
+    ) -> impl Future<Item = Vec<Integer>, Error = EventError> {
+        self.bot
+            .unban_chat_administrators(channel_id)
+            .send()
+            .map_err(|e| EventError::from(e.context(EventErrorKind::TelegramLookup)))
+            .and_then(move |(bot, admins)| {
+                let channel_admins = admins
+                    .into_iter()
+                    .map(|admin| admin.user.id)
+                    .collect::<HashSet<_>>();
+
+                iter_ok(chat_ids)
+                    .and_then(move |chat_id| {
+                        bot.unban_chat_administrators(chat_id)
+                            .send()
+                            .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
+                            .map(move |(bot, admins)| (bot, admins, chat_id))
+                    })
+                    .filter_map(move |(_, admins, chat_id)| {
+                        if admins
+                            .into_iter()
+                            .any(|admin| channel_admins.contains(&admin.user.id))
+                        {
+                            Some(chat_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+    }
+
+    fn send_help(&self, chat_id: Integer) {
+        self.bot.inner.handle.spawn(
+            self.bot
+                .message(
+                    chat_id,
+                    "/init - Initialize an event channel
+/link - link a group chat with an event channel (usage: /link [chat_id])
+/id - get the id of a group chat
+/events - get a list of events for the current chat
+/new - Create a new event (in a private chat with the bot)
+/edit - Edit an event you're hosting (in a private chat with the bot)
+/delete - Delete an event you're hosting (in a private chat with the bot)
+/help - Print this help message"
+                        .to_owned(),
+                )
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn send_error(bot: RcBot, chat_id: Integer, error: &str) {
+        bot.inner.handle.spawn(
+            bot.message(chat_id, error.to_owned())
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn send_url(bot: RcBot, chat_id: Integer, action: String, url: String) {
+        bot.inner.handle.spawn(
+            bot.message(
+                chat_id,
+                format!("Use this link to {} your event: {}", action, url),
+            ).send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        )
+    }
+
+    fn send_events(bot: RcBot, chat_id: Integer, events: Vec<Event>) {
+        bot.inner.handle.spawn(
+            print_events(bot.clone(), chat_id, events).map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn print_id(bot: RcBot, chat_id: Integer) {
+        bot.inner.handle.spawn(
+            bot.message(chat_id, format!("{}", chat_id))
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn linked(bot: RcBot, channel_id: Integer, chat_ids: Vec<Integer>) {
+        let msg = format!(
+            "Linked channel '{}' to chats ({})",
+            channel_id,
+            chat_ids
+                .into_iter()
+                .map(|id| format!("{}", id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        bot.inner.handle.spawn(
+            bot.message(channel_id, msg)
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+
+    fn created_channel(bot: RcBot, channel_id: Integer) {
+        bot.inner.handle.spawn(
+            bot.message(channel_id, format!("Initialized"))
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error: {:?}", e)),
+        );
+    }
+}
+
+fn format_duration(event: &Event) -> String {
+    let duration = event
+        .end_date()
+        .signed_duration_since(event.start_date().clone());
+
+    if duration.num_weeks() > 0 {
+        format!("{} Weeks", duration.num_weeks())
+    } else if duration.num_days() > 0 {
+        format!("{} Days", duration.num_days())
+    } else if duration.num_hours() > 0 {
+        format!("{} Hours", duration.num_hours())
+    } else if duration.num_minutes() > 0 {
+        format!("{} Minutes", duration.num_minutes())
+    } else {
+        "No time".to_owned()
+    }
+}
+
+fn print_events(
+    bot: RcBot,
+    chat_id: Integer,
+    events: Vec<Event>,
+) -> impl Future<Item = (), Error = EventError> {
+    let events = events
+        .into_iter()
+        .map(|event| {
+            let localtime = event.start_date().with_timezone(&Central);
+            let when = format_date(localtime);
+            let duration = format_duration(&event);
+            let hosts = event
+                .hosts()
+                .iter()
+                .map(|host| format!("@{}", host.username()))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            format!(
+                "{}\nWhen: {}\nDuration: {}\nDescription: {}\nHosts: {}",
+                event.title(),
+                when,
+                duration,
+                event.description(),
+                hosts
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let msg = if events.len() > 0 {
+        format!("Upcoming Events:\n\n{}", events)
+    } else {
+        "No upcoming events".to_owned()
+    };
+
+    bot.message(chat_id, msg)
+        .send()
+        .map(|_| ())
+        .map_err(|e| e.context(EventErrorKind::Telegram).into())
+}
+
+fn format_date<T>(localtime: DateTime<T>) -> String
+where
+    T: TimeZone + Debug,
+{
+    let weekday = match localtime.weekday() {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
+    };
+
+    let month = match localtime.month() {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => "Unknown Month",
+    };
+
+    let day = match localtime.day() {
+        1 | 21 | 31 => "st",
+        2 | 22 => "nd",
+        3 | 23 => "rd",
+        _ => "th",
+    };
+
+    let minute = if localtime.minute() > 9 {
+        format!("{}", localtime.minute())
+    } else {
+        format!("0{}", localtime.minute())
+    };
+
+    format!(
+        "{}:{} {:?}, {}, {} {}{}",
+        localtime.hour(),
+        minute,
+        localtime.timezone(),
+        weekday,
+        month,
+        localtime.day(),
+        day
+    )
 }
