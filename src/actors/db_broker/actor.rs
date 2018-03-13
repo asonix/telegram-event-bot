@@ -9,25 +9,35 @@ use super::DbBroker;
 use super::messages::*;
 
 impl DbBroker {
-    fn wrap_fut<I, Fut, Func>(&self, f: Func) -> Box<ActorFuture<Item = I, Error = EventError, Actor = Self>>
+    fn wrap_fut<I, Fut, Func>(
+        &self,
+        f: Func,
+    ) -> Box<ActorFuture<Item = I, Error = EventError, Actor = Self>>
     where
         Func: FnOnce(Connection) -> Fut + 'static,
-        Fut: Future<
-            Item = (I, Connection),
-            Error = (EventError, Connection),
-        >
-            + 'static,
+        Fut: Future<Item = (I, Connection), Error = (EventError, Connection)> + 'static,
     {
-
         Box::new(
-            wrap_future::<_, Self>(self.connections.clone().map_err(Err).and_then(move |connection| f(connection).map_err(Ok)))
-                .map(|(item, connection), db_broker, _| {
-                    db_broker.connections.0.borrow_mut().push_front(connection);
-                    item
-                })
+            wrap_future::<_, Self>(
+                self.connections
+                    .clone()
+                    .map_err(Err)
+                    .and_then(move |connection| f(connection).map_err(Ok)),
+            ).map(|(item, connection), db_broker, _| {
+                db_broker.connections.0.borrow_mut().push_front(connection);
+                debug!(
+                    "Restored db connection, total available connections: {}",
+                    db_broker.connections.0.borrow().len()
+                );
+                item
+            })
                 .map_err(|res, db_broker, _| match res {
                     Ok((error, connection)) => {
                         db_broker.connections.0.borrow_mut().push_front(connection);
+                        debug!(
+                            "Restored db connection, total available connections: {}",
+                            db_broker.connections.0.borrow().len()
+                        );
 
                         error
                     }
@@ -88,7 +98,9 @@ impl Handler<NewChat> for DbBroker {
     type Result = ResponseFuture<Self, NewChat>;
 
     fn handle(&mut self, msg: NewChat, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::insert_chat(msg.channel_id, msg.chat_id, connection))
+        self.wrap_fut(move |connection| {
+            DbBroker::insert_chat(msg.channel_id, msg.chat_id, connection)
+        })
     }
 }
 
@@ -96,7 +108,9 @@ impl Handler<NewUser> for DbBroker {
     type Result = ResponseFuture<Self, NewUser>;
 
     fn handle(&mut self, msg: NewUser, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::new_user(msg.chat_id, msg.user_id, msg.username, connection))
+        self.wrap_fut(move |connection| {
+            DbBroker::new_user(msg.chat_id, msg.user_id, msg.username, connection)
+        })
     }
 }
 
@@ -104,7 +118,9 @@ impl Handler<NewRelation> for DbBroker {
     type Result = ResponseFuture<Self, NewRelation>;
 
     fn handle(&mut self, msg: NewRelation, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::new_user_chat_relation(msg.chat_id, msg.user_id, connection))
+        self.wrap_fut(move |connection| {
+            DbBroker::new_user_chat_relation(msg.chat_id, msg.user_id, connection)
+        })
     }
 }
 
@@ -112,14 +128,17 @@ impl Handler<NewEvent> for DbBroker {
     type Result = ResponseFuture<Self, NewEvent>;
 
     fn handle(&mut self, msg: NewEvent, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::insert_event(
-            msg.system_id,
-            msg.title,
-            msg.description,
-            msg.start_date,
-            msg.end_date,
-            msg.hosts, connection,
-        ))
+        self.wrap_fut(move |connection| {
+            DbBroker::insert_event(
+                msg.system_id,
+                msg.title,
+                msg.description,
+                msg.start_date,
+                msg.end_date,
+                msg.hosts,
+                connection,
+            )
+        })
     }
 }
 
@@ -127,15 +146,18 @@ impl Handler<EditEvent> for DbBroker {
     type Result = ResponseFuture<Self, EditEvent>;
 
     fn handle(&mut self, msg: EditEvent, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::edit_event(
-            msg.id,
-            msg.system_id,
-            msg.title,
-            msg.description,
-            msg.start_date,
-            msg.end_date,
-            msg.hosts, connection,
-        ))
+        self.wrap_fut(move |connection| {
+            DbBroker::edit_event(
+                msg.id,
+                msg.system_id,
+                msg.title,
+                msg.description,
+                msg.start_date,
+                msg.end_date,
+                msg.hosts,
+                connection,
+            )
+        })
     }
 }
 
@@ -175,7 +197,9 @@ impl Handler<GetEventsInRange> for DbBroker {
     type Result = ResponseFuture<Self, GetEventsInRange>;
 
     fn handle(&mut self, msg: GetEventsInRange, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::get_events_in_range(msg.start_date, msg.end_date, connection))
+        self.wrap_fut(move |connection| {
+            DbBroker::get_events_in_range(msg.start_date, msg.end_date, connection)
+        })
     }
 }
 
@@ -183,7 +207,9 @@ impl Handler<GetChatSystemByEventId> for DbBroker {
     type Result = ResponseFuture<Self, GetChatSystemByEventId>;
 
     fn handle(&mut self, msg: GetChatSystemByEventId, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::get_chat_system_by_event_id(msg.event_id, connection))
+        self.wrap_fut(move |connection| {
+            DbBroker::get_chat_system_by_event_id(msg.event_id, connection)
+        })
     }
 }
 
@@ -223,12 +249,15 @@ impl Handler<StoreEditEventLink> for DbBroker {
     type Result = ResponseFuture<Self, StoreEditEventLink>;
 
     fn handle(&mut self, msg: StoreEditEventLink, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::store_edit_event_link(
-            msg.user_id,
-            msg.system_id,
-            msg.event_id,
-            msg.secret, connection,
-        ))
+        self.wrap_fut(move |connection| {
+            DbBroker::store_edit_event_link(
+                msg.user_id,
+                msg.system_id,
+                msg.event_id,
+                msg.secret,
+                connection,
+            )
+        })
     }
 }
 
@@ -252,7 +281,9 @@ impl Handler<StoreEventLink> for DbBroker {
     type Result = ResponseFuture<Self, StoreEventLink>;
 
     fn handle(&mut self, msg: StoreEventLink, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| DbBroker::store_event_link(msg.user_id, msg.system_id, msg.secret, connection))
+        self.wrap_fut(move |connection| {
+            DbBroker::store_event_link(msg.user_id, msg.system_id, msg.secret, connection)
+        })
     }
 }
 

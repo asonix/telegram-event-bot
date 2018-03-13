@@ -6,7 +6,7 @@ use futures::{Future, IntoFuture};
 
 use actors::db_broker::DbBroker;
 use actors::db_broker::messages::{DeleteEditEventLink, DeleteEventLink, EditEvent,
-                                 LookupEditEventLink, LookupEvent, LookupEventLink, NewEvent};
+                                  LookupEditEventLink, LookupEvent, LookupEventLink, NewEvent};
 use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{NewEvent as TgNewEvent, UpdateEvent as TgUpdateEvent};
 use actors::timer::Timer;
