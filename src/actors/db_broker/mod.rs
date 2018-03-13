@@ -219,13 +219,6 @@ impl DbBroker {
         Event::by_system_id(system_id, connection)
     }
 
-    fn get_chat_system_by_event_id(
-        event_id: i32,
-        connection: Connection,
-    ) -> impl Future<Item = (ChatSystem, Connection), Error = (EventError, Connection)> {
-        ChatSystem::by_event_id(event_id, connection)
-    }
-
     fn get_system_by_id(
         system_id: i32,
         connection: Connection,

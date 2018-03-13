@@ -118,39 +118,6 @@ impl ChatSystem {
         ChatSystem::delete_by_id(self.id, connection)
     }
 
-    /// Select the chat system by event id
-    pub fn by_event_id(
-        event_id: i32,
-        connection: Connection,
-    ) -> impl Future<Item = (ChatSystem, Connection), Error = (EventError, Connection)> {
-        let sql = "SELECT sys.id, sys.events_channel
-                    FROM chat_systems AS sys
-                    LEFT JOIN events AS ev ON ev.system_id = sys.id
-                    WHERE ev.id = $1";
-        debug!("{}", sql);
-
-        connection
-            .prepare(sql)
-            .map_err(prepare_error)
-            .and_then(move |(s, connection)| {
-                connection
-                    .query(&s, &[&event_id])
-                    .map(|row| ChatSystem {
-                        id: row.get(0),
-                        events_channel: row.get(1),
-                    })
-                    .collect()
-                    .map_err(lookup_error)
-            })
-            .and_then(|(mut chat_systems, connection)| {
-                if chat_systems.len() == 1 {
-                    Ok((chat_systems.remove(0), connection))
-                } else {
-                    Err((EventErrorKind::Lookup.into(), connection))
-                }
-            })
-    }
-
     /// Select the chat system by channel id
     pub fn by_channel_id(
         channel_id: Integer,

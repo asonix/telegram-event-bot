@@ -203,16 +203,6 @@ impl Handler<GetEventsInRange> for DbBroker {
     }
 }
 
-impl Handler<GetChatSystemByEventId> for DbBroker {
-    type Result = ResponseFuture<Self, GetChatSystemByEventId>;
-
-    fn handle(&mut self, msg: GetChatSystemByEventId, _: &mut Self::Context) -> Self::Result {
-        self.wrap_fut(move |connection| {
-            DbBroker::get_chat_system_by_event_id(msg.event_id, connection)
-        })
-    }
-}
-
 impl Handler<LookupSystem> for DbBroker {
     type Result = ResponseFuture<Self, LookupSystem>;
 

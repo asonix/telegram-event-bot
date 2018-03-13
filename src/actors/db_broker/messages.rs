@@ -158,16 +158,6 @@ impl ResponseType for GetEventsInRange {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct GetChatSystemByEventId {
-    pub event_id: i32,
-}
-
-impl ResponseType for GetChatSystemByEventId {
-    type Item = ChatSystem;
-    type Error = EventError;
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct LookupSystem {
     pub system_id: i32,
 }

@@ -35,7 +35,7 @@ use dotenv::dotenv;
 use actors::db_broker::DbBroker;
 use actors::event_actor::EventActor;
 use actors::telegram_actor::TelegramActor;
-use actors::telegram_message_actor::{StartStreaming, TelegramMessageActor};
+use actors::telegram_actor::messages::StartStreaming;
 use actors::timer::Timer;
 use actors::users_actor::UsersActor;
 use conn::prepare_database_connection;
@@ -67,29 +67,23 @@ fn main() {
 
     let db_url = prepare_database_connection().unwrap();
 
-    let bot_token = bot_token();
-
-    let actor_bot = RcBot::new(Arbiter::handle().clone(), &bot_token);
-
     let db_broker: Address<_> = DbBroker::new(db_url, 10).start();
+    let db_broker2 = db_broker.clone();
 
     let users_actor = UsersActor::new(db_broker.clone()).start();
 
-    let tg: Address<_> = TelegramActor::new(actor_bot, db_broker.clone()).start();
+    let bot = RcBot::new(Arbiter::handle().clone(), &bot_token()).timeout(30);
 
-    let timer: Address<_> = Timer::new(db_broker.clone(), tg.clone()).start();
+    let telegram_actor: Address<_> =
+        Supervisor::start(move |_| TelegramActor::new(url(), bot, db_broker2, users_actor));
 
-    let sync_event_actor: SyncAddress<_> = EventActor::new(tg, db_broker.clone(), timer).start();
+    telegram_actor.send(StartStreaming);
 
-    let msg_actor_bot = RcBot::new(Arbiter::handle().clone(), &bot_token);
+    let timer: Address<_> = Timer::new(db_broker.clone(), telegram_actor.clone()).start();
 
+    let sync_event_actor: SyncAddress<_> =
+        EventActor::new(telegram_actor, db_broker, timer).start();
     event_web::start(sync_event_actor, "0.0.0.0:8000", None);
-
-    let tma: Address<_> = Supervisor::start(|_| {
-        TelegramMessageActor::new(url(), msg_actor_bot.timeout(30), db_broker, users_actor)
-    });
-
-    tma.send(StartStreaming);
 
     sys.run();
 }
