@@ -2,6 +2,7 @@ use std::fmt;
 
 use actix_web::*;
 use actix_web::error::ResponseError;
+use views::error;
 use failure::{Backtrace, Context, Fail};
 
 #[derive(Debug)]
@@ -27,10 +28,7 @@ impl Fail for FrontendError {
 
 impl ResponseError for FrontendError {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::new(
-            StatusCode::BAD_REQUEST,
-            format!("{}, {:?}", self, self).into(),
-        )
+        HttpResponse::new(StatusCode::BAD_REQUEST, error(self).into_string().into())
     }
 }
 

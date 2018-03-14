@@ -1,5 +1,7 @@
+use failure::Fail;
 use maud::{html, Markup, DOCTYPE};
 
+use error::FrontendError;
 use event::{CreateEvent, Event, OptionEvent};
 
 pub fn form(
@@ -287,6 +289,34 @@ pub fn success(event: Event, title: &str) -> Markup {
                         }
                         p {
                             "End: " (event.end_date().to_rfc2822())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn error(error: &FrontendError) -> Markup {
+    html! {
+        (DOCTYPE)
+        html {
+            head {
+                title {
+                    "Event Bot | Error"
+                }
+                link href="/assets/styles.css" rel="stylesheet" type="text/css";
+            }
+            body {
+                section {
+                    article {
+                        h1 {
+                            "Oops, there was an error processing your request"
+                        }
+                        @if let Some(cause) = error.cause() {
+                            p {
+                                (cause)
+                            }
                         }
                     }
                 }
