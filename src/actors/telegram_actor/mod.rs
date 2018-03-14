@@ -768,11 +768,16 @@ impl TelegramActor {
             })
             .collect()
             .and_then(move |buttons| {
-                bot2.message(
-                    chat_id,
-                    "Which channel would you like to create an event for?".to_owned(),
-                ).reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
-                    .send()
+                let msg = if buttons.len() > 0 {
+                    bot2.message(
+                        chat_id,
+                        "Which channel would you like to create an event for?".to_owned(),
+                    ).reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                } else {
+                    bot2.message(chat_id, "You aren't in any chats with an associated events channel. If you believe this a mistake, please send a message in the associated chat first, then try again".to_owned())
+                };
+
+                msg.send()
                     .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
             });
 
@@ -796,9 +801,13 @@ impl TelegramActor {
             })
             .collect()
             .and_then(move |buttons| {
-                bot2.message(chat_id, "Which event would you like to delete?".to_owned())
-                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
-                    .send()
+                let msg = if buttons.len() > 0 {
+                    bot2.message(chat_id, "Which event would you like to delete?".to_owned())
+                        .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                } else {
+                    bot2.message(chat_id, "You aren't hosting any events".to_owned())
+                };
+                msg.send()
                     .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
             });
 
@@ -820,9 +829,13 @@ impl TelegramActor {
             })
             .collect()
             .and_then(move |buttons| {
-                bot2.message(chat_id, "Which event would you like to edit?".to_owned())
-                    .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
-                    .send()
+                let msg = if buttons.len() > 0 {
+                    bot2.message(chat_id, "Which event would you like to edit?".to_owned())
+                        .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                } else {
+                    bot2.message(chat_id, "You aren't hosting any events".to_owned())
+                };
+                msg.send()
                     .map_err(|e| EventError::from(e.context(EventErrorKind::Telegram)))
             });
 
