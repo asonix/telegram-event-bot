@@ -1,3 +1,8 @@
+//! This module defines a `ChatSystem` and related functions and types.
+//!
+//! Chat Systems are used to group a series of chats together with an events channel, to allow
+//! members of those chats to create events for the channel
+
 use futures::Future;
 use futures_state_stream::StateStream;
 use telebot::objects::Integer;
@@ -27,14 +32,17 @@ pub struct ChatSystem {
 }
 
 impl ChatSystem {
+    /// Get the ID of the Chat System
     pub fn id(&self) -> i32 {
         self.id
     }
 
+    /// Get the Telegram Channel ID for the Chat System's channel
     pub fn events_channel(&self) -> Integer {
         self.events_channel
     }
 
+    /// Create a `ChatSystem` given a Telegram Chat ID
     pub fn create(
         events_channel: Integer,
         connection: Connection,
@@ -150,6 +158,7 @@ impl ChatSystem {
             })
     }
 
+    /// Get a collection of every `ChatSystem` with its associated `Chats` from the database
     pub fn all_with_chats(
         connection: Connection,
     ) -> impl Future<Item = (Vec<(ChatSystem, Chat)>, Connection), Error = (EventError, Connection)>

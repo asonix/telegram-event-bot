@@ -1,3 +1,5 @@
+//! This module defines all the Handler and Actor traits for the `DbBroker` type.
+
 use actix::{Actor, ActorFuture, Address, Arbiter, AsyncContext, Context, Handler, ResponseFuture};
 use actix::fut::wrap_future;
 use futures::Future;

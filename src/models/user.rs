@@ -1,3 +1,5 @@
+//! This module defines the `User` struct and associated types and functions.
+
 use futures::Future;
 use futures_state_stream::StateStream;
 use telebot::objects::Integer;
@@ -18,6 +20,7 @@ use util::*;
 /// ### Columns:
 /// - id SERIAL
 /// - user_id BIGINT
+/// - username TEXT
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct User {
     id: i32,
@@ -26,6 +29,7 @@ pub struct User {
 }
 
 impl User {
+    /// Construct a User from a series of Option types
     pub fn maybe_from_parts(
         id: Option<i32>,
         user_id: Option<Integer>,
@@ -38,18 +42,22 @@ impl User {
         })
     }
 
+    /// Get the user's ID
     pub fn id(&self) -> i32 {
         self.id
     }
 
+    /// Get the user's Telegram ID
     pub fn user_id(&self) -> Integer {
         self.user_id
     }
 
+    /// Get the user's Telegram username
     pub fn username(&self) -> &str {
         &self.username
     }
 
+    /// Get a `Vec<User>` given a list of Telegram IDs
     pub fn by_user_ids(
         user_ids: Vec<Integer>,
         connection: Connection,
@@ -86,6 +94,7 @@ impl User {
             })
     }
 
+    /// Get a `Vec<User>` given a list of database IDs
     pub fn by_ids(
         ids: Vec<i32>,
         connection: Connection,
@@ -121,6 +130,7 @@ impl User {
             })
     }
 
+    /// Get a vector of Users and their associated Chats
     pub fn get_with_chats(
         connection: Connection,
     ) -> impl Future<Item = (Vec<(User, Chat)>, Connection), Error = (EventError, Connection)> {
@@ -151,6 +161,7 @@ impl User {
             })
     }
 
+    /// Delete a User from the database
     pub fn delete_by_user_id(
         user_id: Integer,
         connection: Connection,
@@ -173,6 +184,7 @@ impl User {
             })
     }
 
+    /// Remove a relationship between a User and a Chat
     pub fn delete_relation_by_ids(
         user_id: Integer,
         chat_id: Integer,
@@ -201,12 +213,15 @@ impl User {
     }
 }
 
+/// This type allows for safe insertion of Users into the database
 pub struct CreateUser {
     pub user_id: Integer,
     pub username: String,
 }
 
 impl CreateUser {
+    /// Create a relationship between the user with the given Telegram ID and the chat with the
+    /// given Telegram ID
     pub fn create_relation(
         users_id: Integer,
         chats_id: Integer,
@@ -231,6 +246,7 @@ impl CreateUser {
             })
     }
 
+    /// Create a User with the provided information
     pub fn create(
         self,
         chat: &Chat,

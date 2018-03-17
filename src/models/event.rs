@@ -53,34 +53,43 @@ impl Hash for Event {
 }
 
 impl Event {
+    /// Get the `Event` database ID
     pub fn id(&self) -> i32 {
         self.id
     }
 
+    /// Get the `Event` start date
     pub fn start_date(&self) -> &DateTime<Tz> {
         &self.start_date
     }
 
+    /// Get the `Event` end date
     pub fn end_date(&self) -> &DateTime<Tz> {
         &self.end_date
     }
 
+    /// Get the `Event` title
     pub fn title(&self) -> &str {
         &self.title
     }
 
+    /// Get the `Event` description
     pub fn description(&self) -> &str {
         &self.description
     }
 
+    /// Get the Users hosting the `Event`
     pub fn hosts(&self) -> &[User] {
         self.hosts.as_slice()
     }
 
+    /// Get the ID of the associated `ChatSystem`
     pub fn system_id(&self) -> i32 {
         self.system_id
     }
 
+    /// Merge two events that are the same, appending hosts but overwriting other fields, puttign
+    /// the result on the end of a vector
     pub fn condense(events: &mut Vec<Self>, mut event_1: Self, event_2: Self) {
         let these_events = if event_1.id != event_2.id {
             vec![event_1, event_2]
@@ -92,6 +101,7 @@ impl Event {
         events.extend(these_events);
     }
 
+    /// Merge events that are the same, appending hosts but overwriting other fields
     fn condense_events(events: Vec<Self>) -> Vec<Self> {
         events.into_iter().fold(Vec::new(), |mut acc, event| {
             let len = acc.len();
@@ -379,6 +389,10 @@ impl Event {
     }
 }
 
+/// This type exists as a way to safely update events in the database.
+///
+/// If all fields are provided and an UpdateEvent is successfully created, the event can be safely
+/// updated in the database.
 #[derive(Clone, Debug)]
 pub struct UpdateEvent {
     pub id: i32,
@@ -391,6 +405,7 @@ pub struct UpdateEvent {
 }
 
 impl UpdateEvent {
+    /// Perform the database interaction to update the event
     pub fn update(
         self,
         connection: Connection,
@@ -443,6 +458,7 @@ impl UpdateEvent {
     }
 }
 
+/// This type provides a safe way to create events in the database
 #[derive(Clone, Debug)]
 pub struct CreateEvent {
     pub system_id: i32,

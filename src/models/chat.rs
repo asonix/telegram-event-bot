@@ -1,3 +1,5 @@
+//! This module defines the `Chat` struct, and associated types and functions.
+
 use futures::Future;
 use futures_state_stream::StateStream;
 use telebot::objects::Integer;
@@ -25,18 +27,22 @@ pub struct Chat {
 }
 
 impl Chat {
+    /// Create a `Chat` from the parts that make up a `Chat`
     pub fn from_parts(id: i32, chat_id: Integer) -> Self {
         Chat { id, chat_id }
     }
 
+    /// Get the chat's ID
     pub fn id(&self) -> i32 {
         self.id
     }
 
+    /// Get the chat's Telegram ID
     pub fn chat_id(&self) -> Integer {
         self.chat_id
     }
 
+    /// Get a chat from the database given the chat's Telegram ID
     pub fn by_chat_id(
         chat_id: Integer,
         connection: Connection,
@@ -67,11 +73,18 @@ impl Chat {
     }
 }
 
+/// This struct is used when inserting chats into the database
+///
+/// Since a chat is only made up of an ID and a Chat ID, only the Chat ID is required to insert a
+/// `Chat`.
 pub struct CreateChat {
+    /// The Telegram ID of the chat to be inserted
     pub chat_id: Integer,
 }
 
 impl CreateChat {
+    /// Insert the `CreateChat` into the `chats` table, returning the created `Chat` or an
+    /// `EventError`
     pub fn create(
         self,
         chat_system: &ChatSystem,

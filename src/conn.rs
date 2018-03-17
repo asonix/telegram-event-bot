@@ -1,3 +1,5 @@
+//! This module contains funtions for preparing for database interaction
+
 use std::env;
 
 use dotenv::dotenv;
@@ -8,14 +10,14 @@ use tokio_postgres::{Connection, TlsMode};
 
 use error::{DbConnError, EventError, EventErrorKind};
 
-// Wrap the var -> error -> context pipeline in a function
+/// Wrap the var -> error -> context pipeline in a function
 fn get_db_env(key: &str, err: DbConnError) -> Result<String, Context<EventErrorKind>> {
     env::var(key)
         .map_err(|_| err)
         .context(EventErrorKind::MissingEnv)
 }
 
-// Build the database URL string from the provided environment variables
+/// Build the database URL string from the provided environment variables
 pub fn prepare_database_connection() -> Result<String, EventError> {
     dotenv().ok();
 
@@ -34,6 +36,7 @@ pub fn prepare_database_connection() -> Result<String, EventError> {
     ))
 }
 
+/// Given a string, return a future representing the Database Connection
 pub fn connect_to_database(
     db_url: String,
     handle: Handle,
