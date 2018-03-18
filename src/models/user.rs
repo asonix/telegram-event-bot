@@ -247,6 +247,7 @@ impl CreateUser {
         connection: Connection,
     ) -> impl Future<Item = ((), Connection), Error = (EventError, Connection)> {
         let join_sql = "INSERT INTO user_chats (users_id, chats_id) VALUES ($1, $2)";
+        debug!("{}", join_sql);
 
         connection
             .prepare(join_sql)
@@ -256,12 +257,17 @@ impl CreateUser {
                     .execute(&s, &[&users_id, &chats_id])
                     .map_err(insert_error)
                     .and_then(|(count, connection)| {
+                        debug!("inserted {} user_chats", count);
                         if count == 1 {
                             Ok(((), connection))
                         } else {
                             Err((EventErrorKind::Insert.into(), connection))
                         }
                     })
+            })
+            .map_err(|(e, c)| {
+                error!("Error creating relation: {}", e);
+                (e, c)
             })
     }
 
