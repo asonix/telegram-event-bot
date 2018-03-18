@@ -82,6 +82,13 @@ pub(crate) fn transaction_insert_error(
     (error.context(EventErrorKind::Insert).into(), transaction)
 }
 
+/// Convert a transaction lookup error into an `EventError`
+pub(crate) fn transaction_lookup_error(
+    (error, transaction): (TpError, Transaction),
+) -> (EventError, Transaction) {
+    (error.context(EventErrorKind::Lookup).into(), transaction)
+}
+
 /// Convert a transaction commit error into an `EventError`
 pub(crate) fn commit_error((error, connection): (TpError, Connection)) -> (EventError, Connection) {
     (error.context(EventErrorKind::Commit).into(), connection)

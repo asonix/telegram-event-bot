@@ -242,28 +242,91 @@ impl CreateUser {
     /// Create a relationship between the user with the given Telegram ID and the chat with the
     /// given Telegram ID
     pub fn create_relation(
-        users_id: Integer,
-        chats_id: Integer,
+        user_id: Integer,
+        chat_id: Integer,
         connection: Connection,
     ) -> impl Future<Item = ((), Connection), Error = (EventError, Connection)> {
+        let user_sql = "SELECT usr.id FROM users AS usr WHERE usr.user_id = $1";
+        let chat_sql = "SELECT ch.id FROM chats AS ch WHERE ch.chat_id = $1";
         let join_sql = "INSERT INTO user_chats (users_id, chats_id) VALUES ($1, $2)";
-        debug!("{}", join_sql);
 
         connection
-            .prepare(join_sql)
-            .map_err(prepare_error)
-            .and_then(move |(s, connection)| {
-                connection
-                    .execute(&s, &[&users_id, &chats_id])
-                    .map_err(insert_error)
-                    .and_then(|(count, connection)| {
-                        debug!("inserted {} user_chats", count);
-                        if count == 1 {
-                            Ok(((), connection))
-                        } else {
-                            Err((EventErrorKind::Insert.into(), connection))
-                        }
+            .transaction()
+            .map_err(transaction_error)
+            .and_then(move |transaction| {
+                debug!("User sql: {}", user_sql);
+                transaction
+                    .prepare(user_sql)
+                    .map_err(transaction_prepare_error)
+                    .and_then(move |(s, transaction)| {
+                        transaction
+                            .query(&s, &[&user_id])
+                            .map(|row| row.get::<i32, usize>(0))
+                            .collect()
+                            .map_err(transaction_lookup_error)
+                            .and_then(|(mut ids, transaction)| {
+                                if ids.len() > 0 {
+                                    Ok((ids.remove(0), transaction))
+                                } else {
+                                    Err((EventErrorKind::Lookup.into(), transaction))
+                                }
+                            })
                     })
+                    .and_then(move |(users_id, transaction)| {
+                        debug!("Chat sql: {}", chat_sql);
+                        transaction
+                            .prepare(chat_sql)
+                            .map_err(transaction_prepare_error)
+                            .and_then(move |(s, transaction)| {
+                                transaction
+                                    .query(&s, &[&chat_id])
+                                    .map(|row| row.get::<i32, usize>(0) as i32)
+                                    .collect()
+                                    .map_err(transaction_lookup_error)
+                                    .and_then(|(mut ids, transaction)| {
+                                        if ids.len() > 0 {
+                                            Ok((ids.remove(0), transaction))
+                                        } else {
+                                            Err((EventErrorKind::Lookup.into(), transaction))
+                                        }
+                                    })
+                            })
+                            .map(move |(chats_id, transaction)| (users_id, chats_id, transaction))
+                    })
+                    .and_then(move |(users_id, chats_id, transaction)| {
+                        debug!("{}", join_sql);
+                        transaction
+                            .prepare(join_sql)
+                            .map_err(transaction_prepare_error)
+                            .and_then(move |(s, connection)| {
+                                connection
+                                    .execute(&s, &[&users_id, &chats_id])
+                                    .map_err(transaction_insert_error)
+                                    .and_then(|(count, connection)| {
+                                        debug!("inserted {} user_chats", count);
+                                        if count == 1 {
+                                            Ok(((), connection))
+                                        } else {
+                                            Err((EventErrorKind::Insert.into(), connection))
+                                        }
+                                    })
+                            })
+                    })
+                    .or_else(|(error, transaction)| {
+                        transaction
+                            .rollback()
+                            .or_else(|(_, connection)| Err(connection))
+                            .then(move |res| match res {
+                                Ok(connection) => Err((error, connection)),
+                                Err(connection) => Err((error, connection)),
+                            })
+                    })
+            })
+            .and_then(|(item, transaction)| {
+                transaction
+                    .commit()
+                    .map_err(commit_error)
+                    .map(move |connection| (item, connection))
             })
             .map_err(|(e, c)| {
                 error!("Error creating relation: {:?}", e);
