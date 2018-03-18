@@ -266,7 +266,7 @@ impl CreateUser {
                     })
             })
             .map_err(|(e, c)| {
-                error!("Error creating relation: {}", e);
+                error!("Error creating relation: {:?}", e);
                 (e, c)
             })
     }
