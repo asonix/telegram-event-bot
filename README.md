@@ -2,6 +2,9 @@
 
 This bot exists to manage social events happening for connected chats on Telegram
 
+![event creation request](https://raw.githubusercontent.com/asonix/telegram-event-bot/master/img/new_event.png)
+![event creation form](https://raw.githubusercontent.com/asonix/telegram-event-bot/master/img/event_form.png)
+
 ### Usage
 
 You can talk to this bot on Telegram to get it added to your chats. The bot can be found at [t.me/coconuts_event_bot](https://t.me/coconuts_event_bot).
