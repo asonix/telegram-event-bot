@@ -1,3 +1,23 @@
+/*
+ * This file is part of Telegram Event Bot.
+ *
+ * Copyright © 2018 Riley Trautman
+ *
+ * Telegram Event Bot is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Telegram Event Bot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//! This module defines the EventActor. This actor handles callbacks from the web UI
 use actix::Address;
 use event_web::{Event as FrontendEvent, FrontendError, FrontendErrorKind};
 use event_web::verify_secret;
@@ -16,6 +36,9 @@ use util::flatten;
 
 mod actor;
 
+/// The EventActor handles callbacks from the Web UI. It talks to the database actor to ensure new
+/// and updated events are valid, and talks to the telegram actor to notify users of changes to
+/// events.
 #[derive(Clone)]
 pub struct EventActor {
     tg: Address<TelegramActor>,
@@ -28,6 +51,7 @@ impl EventActor {
         EventActor { tg, db, timer }
     }
 
+    /// This handles new events from the web UI
     fn new_event(
         &mut self,
         event: FrontendEvent,
@@ -40,6 +64,9 @@ impl EventActor {
         let tg = self.tg.clone();
         let timer = self.timer.clone();
 
+        // The ID is defined as a series of random characters, followed by an =, followed by the
+        // ID of the `NewEventLink` used to create the event. This is used to validate that
+        // someone actually used the generated link instead of guessing.
         id.rfind('=')
             .ok_or(EventError::from(EventErrorKind::Secret))
             .and_then(move |index| {
@@ -58,8 +85,10 @@ impl EventActor {
                     .then(flatten::<LookupEventLink>)
                     .and_then(move |nel| match verify_secret(&base64d, nel.secret()) {
                         Ok(b) => if b {
+                            // If the secret was verified, continue
                             Ok(nel)
                         } else {
+                            // Error if the secret was not valid
                             Err(EventError::from(EventErrorKind::Frontend))
                         },
                         Err(e) => Err(EventError::from(e.context(EventErrorKind::Frontend))),
@@ -92,6 +121,8 @@ impl EventActor {
             .map_err(|e| FrontendError::from(e.context(FrontendErrorKind::Verification)))
     }
 
+    /// When editing an event, the frontend requests the event's current contents. This handles
+    /// that request.
     fn lookup_event(
         &mut self,
         id: String,
@@ -144,6 +175,7 @@ impl EventActor {
             .map_err(|e| FrontendError::from(e.context(FrontendErrorKind::Verification)))
     }
 
+    /// When the edited event comes in from the Web UI, this handles the update logic
     fn edit_event(
         &mut self,
         event: FrontendEvent,
@@ -156,6 +188,7 @@ impl EventActor {
         let tg = self.tg.clone();
         let timer = self.timer.clone();
 
+        // Split the ID into the secret and ID parts
         id.rfind('=')
             .ok_or(EventError::from(EventErrorKind::Secret))
             .and_then(move |index| {
@@ -173,6 +206,7 @@ impl EventActor {
                 db.call_fut(LookupEditEventLink(eel_id))
                     .then(flatten::<LookupEditEventLink>)
                     .and_then(move |eel| match verify_secret(&base64d, eel.secret()) {
+                        // Verify the secret is valid
                         Ok(b) => if b {
                             Ok(eel)
                         } else {

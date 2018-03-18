@@ -1,3 +1,24 @@
+/*
+ * This file is part of Telegram Event Bot.
+ *
+ * Copyright © 2018 Riley Trautman
+ *
+ * Telegram Event Bot is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Telegram Event Bot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//! This module defines the DbBroker, a struct that manages access to database conections
+
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -20,6 +41,13 @@ use models::user::{CreateUser, User};
 mod actor;
 pub mod messages;
 
+/// Define the structure that contains the `Connection` collection
+///
+/// This wraps an Rc<RefCell<>> to allow multiple future chains on the DbBroker to have access to
+/// the connections.
+///
+/// Future is implemented for this type, and since it can be easily cloned, multiple futures can
+/// wait on the presence of a `Connection` in the pool.
 pub struct Connections(Rc<RefCell<VecDeque<Connection>>>);
 
 impl Clone for Connections {
@@ -49,6 +77,8 @@ impl Future for Connections {
     }
 }
 
+/// Define the DbBroker. This struct manages access to the connections, and additionally contains
+/// the database url to ensure that new connections can be created.
 pub struct DbBroker {
     num_connections: usize,
     db_url: String,

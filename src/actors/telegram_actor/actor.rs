@@ -1,3 +1,29 @@
+/*
+ * This file is part of Telegram Event Bot.
+ *
+ * Copyright © 2018 Riley Trautman
+ *
+ * Telegram Event Bot is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Telegram Event Bot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//! This module defines the handlers for incoming messages to the `TelegramActor`.
+//!
+//! There are two classes of messages here. The first class is messages the actor sends itself. The
+//! second is messages other actors send this actor. This actor sends itself messages in order to
+//! handle incoming events like Telegram Updates, or a failed Telegram Update Stream. Other actors
+//! send this actor messages as a proxy to talk to Telegram.
+
 use actix::{Actor, Address, Arbiter, AsyncContext, Context, Handler, Supervised};
 use futures::{Future, Stream};
 use futures::stream::{iter_ok, repeat};
@@ -102,6 +128,8 @@ impl Handler<StartStreaming> for TelegramActor {
     }
 }
 
+/// define a static stream for an `RcBot`, in order to use this as a future spawned in the actor's
+/// context.
 fn bot_stream(bot: RcBot) -> impl Stream<Item = (RcBot, Update), Error = EventError> {
     repeat::<RcBot, EventError>(bot)
         .and_then(move |bot| {

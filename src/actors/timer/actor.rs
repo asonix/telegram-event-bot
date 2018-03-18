@@ -1,3 +1,22 @@
+/*
+ * This file is part of Telegram Event Bot.
+ *
+ * Copyright © 2018 Riley Trautman
+ *
+ * Telegram Event Bot is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Telegram Event Bot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 use std::time::Duration;
 
 use actix::{Actor, Address, Arbiter, AsyncContext, Context, Handler};
@@ -12,6 +31,7 @@ impl Actor for Timer {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         debug!("Started Timer Actor");
+        // Every 30 minutes, check for events happening in the next hour
         ctx.add_stream(
             Interval::new(Duration::from_secs(30 * 60), &Arbiter::handle())
                 .unwrap()
@@ -19,6 +39,7 @@ impl Actor for Timer {
                 .map_err(|_| Shutdown),
         );
 
+        // Every 30 seconds, check if any events have any pending actions
         ctx.add_stream(
             Interval::new(Duration::from_secs(30), &Arbiter::handle())
                 .unwrap()

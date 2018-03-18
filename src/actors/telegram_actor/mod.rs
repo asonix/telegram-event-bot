@@ -1,3 +1,25 @@
+/*
+ * This file is part of Telegram Event Bot.
+ *
+ * Copyright © 2018 Riley Trautman
+ *
+ * Telegram Event Bot is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Telegram Event Bot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//! This module defines the `TelegramActor` struct and related functions. It handles talking to
+//! Telegram.
+
 use std::fmt::Debug;
 use std::collections::HashSet;
 
@@ -33,6 +55,7 @@ use util::flatten;
 mod actor;
 pub mod messages;
 
+/// This type defines all the possible shapes of data coming from a Telegram Callback Query
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum CallbackQueryMessage {
     NewEvent {
@@ -48,6 +71,8 @@ pub enum CallbackQueryMessage {
     },
 }
 
+/// Define the Telegram Actor. It knows the base URL of the Web UI, and can talk to the database,
+/// the users actor, and Telegram itself.
 pub struct TelegramActor {
     url: String,
     bot: RcBot,
@@ -89,6 +114,7 @@ impl TelegramActor {
 
                 let db = self.db.clone();
 
+                // Spawn a future that handles removing a user from a chat
                 Arbiter::handle().spawn(
                     self.users
                         .call_fut(RemoveRelation(user_id, chat_id))
@@ -122,6 +148,7 @@ impl TelegramActor {
                 let username = user.username.unwrap_or(user.first_name);
                 let chat_id = message.chat.id;
 
+                // Spawn a future that handles adding a user to a chat
                 Arbiter::handle().spawn(
                     self.users
                         .call_fut(TouchUser(user_id, chat_id))
@@ -153,6 +180,8 @@ impl TelegramActor {
                         let bot = self.bot.clone();
                         let chat_id = message.chat.id;
 
+                        // spawn a future that handles asking the User which chat they want to
+                        // create an event for
                         Arbiter::handle().spawn(
                             self.users
                                 .call_fut(LookupChannels(user.id))
@@ -181,6 +210,10 @@ impl TelegramActor {
                         let bot = self.bot.clone();
                         let chat_id = message.chat.id;
 
+                        // spawn a future that handles asking the User which event they would like
+                        // to edit.
+                        //
+                        // Users can only edit events they host
                         Arbiter::handle().spawn(
                             self.db
                                 .call_fut(LookupEventsByUserId { user_id: user.id })
@@ -211,6 +244,10 @@ impl TelegramActor {
                         let bot = self.bot.clone();
                         let chat_id = message.chat.id;
 
+                        // Spawn a future that handles asking the user which event they would like
+                        // to delete.
+                        //
+                        // Users can only delete events they host.
                         Arbiter::handle().spawn(
                             self.db
                                 .call_fut(LookupEventsByUserId { user_id: user.id })
@@ -241,6 +278,7 @@ impl TelegramActor {
                     if message.chat.kind == "group" || message.chat.kind == "supergroup" {
                         debug!("group | supergroup");
 
+                        // Print the ID of the given chat
                         TelegramActor::print_id(&self.bot, chat_id);
                     } else {
                         TelegramActor::send_error(&self.bot, chat_id, "Cannot link non-group chat");
@@ -253,6 +291,7 @@ impl TelegramActor {
                         debug!("group | supergroup");
                         let bot = self.bot.clone();
 
+                        // Spawn a future that handles printing the events for a given chat
                         Arbiter::handle().spawn(
                             self.db
                                 .call_fut(LookupEventsByChatId { chat_id })
@@ -290,6 +329,7 @@ impl TelegramActor {
                         let username = user.username.unwrap_or(user.first_name);
                         let chat_id = message.chat.id;
 
+                        // Spawn a future that handles updating a user/chat relation
                         Arbiter::handle().spawn(
                             self.users
                                 .call_fut(TouchUser(user_id, chat_id))
@@ -329,6 +369,8 @@ impl TelegramActor {
                     let bot = self.bot.clone();
                     let channel_id = message.chat.id;
 
+                    // Get the valid IDs provided in the link message, update the UserActor with
+                    // the valid links
                     let chat_ids = text.trim_left_matches("/link")
                         .split(' ')
                         .into_iter()
@@ -340,6 +382,8 @@ impl TelegramActor {
                         })
                         .collect();
 
+                    // Spawn a future updating the links between the channel and the given chats in
+                    // the database
                     Arbiter::handle().spawn(
                         self.is_admin(channel_id, chat_ids)
                             .then(move |res| match res {
@@ -375,6 +419,7 @@ impl TelegramActor {
                     let channel_id = message.chat.id;
                     let bot = self.bot.clone();
 
+                    // Spawn a future that adds the given channel to the database
                     Arbiter::handle().spawn(
                         self.db
                             .call_fut(NewChannel { channel_id })
@@ -426,6 +471,7 @@ impl TelegramActor {
                             let url = self.url.clone();
                             match query_data {
                                 CallbackQueryMessage::NewEvent { channel_id } => {
+                                    // Spawn a future that creates a new event
                                     debug!("channel_id: {}", channel_id);
                                     Arbiter::handle().spawn(
                                         self.db
@@ -481,6 +527,7 @@ impl TelegramActor {
                                     );
                                 }
                                 CallbackQueryMessage::EditEvent { event_id } => {
+                                    // Spawn a future that updates a given event
                                     Arbiter::handle().spawn(
                                         self.db
                                             .call_fut(LookupEvent { event_id })
@@ -539,6 +586,7 @@ impl TelegramActor {
                                     system_id,
                                     title,
                                 } => Arbiter::handle().spawn(
+                                    // Spawn a future taht deletes the given event
                                     self.db
                                         .call_fut(DeleteEvent { event_id })
                                         .then(flatten::<DeleteEvent>)
@@ -998,7 +1046,7 @@ fn print_events(
                 .join(", ");
 
             format!(
-                "{}\nWhen: {}\nDuration: {}\nDescription: {}\nHosts: {}",
+                "----Event----\n{}\nWhen: {}\nDuration: {}\nDescription: {}\nHosts: {}",
                 event.title(),
                 when,
                 duration,

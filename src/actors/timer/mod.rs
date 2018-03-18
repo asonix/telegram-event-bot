@@ -1,3 +1,26 @@
+/*
+ * This file is part of Telegram Event Bot.
+ *
+ * Copyright © 2018 Riley Trautman
+ *
+ * Telegram Event Bot is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Telegram Event Bot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//! This module defines the Timer functionality.
+//!
+//! It handles notifying telegram when events are soon, starting, and ending.
+
 use std::collections::{HashMap, HashSet};
 
 use actix::{Address, Arbiter};
@@ -49,6 +72,8 @@ impl Timer {
         }
     }
 
+    /// Notify telegram of any events starting in the next 45 minutes, if a notification has not
+    /// already been sent
     fn migrate_notifies(&mut self, now: DateTime<Utc>) {
         let notify_time = now + OldDuration::minutes(45);
         let index = notify_time.minute() as usize;
@@ -70,6 +95,7 @@ impl Timer {
         }
     }
 
+    /// Notify telegram of any events that have started, if a notification has not already been sent
     fn migrate_starts(&mut self, now: DateTime<Utc>) {
         let index = now.minute() as usize;
 
@@ -100,6 +126,7 @@ impl Timer {
         }
     }
 
+    /// Store events that are happening now, but aren't ending for a while.
     fn migrate_futures(&mut self, now: DateTime<Utc>) {
         let next_hour = now + OldDuration::hours(1);
         let index = now.minute() as usize;
@@ -120,6 +147,7 @@ impl Timer {
         }
     }
 
+    /// Notify telegram when an event has ended, if it has not already done so
     fn migrate_ends(&mut self, now: DateTime<Utc>) {
         let index = now.minute() as usize;
 
@@ -163,6 +191,7 @@ impl Timer {
         }
     }
 
+    /// Properly place and notify telegram of an updated event
     fn update_event(&mut self, event: Event) {
         if let Some(state) = self.states.remove(&event.id()) {
             if let Some(old_event) = self.events.remove(&event.id()) {
@@ -196,6 +225,7 @@ impl Timer {
         self.new_event(event, Utc::now());
     }
 
+    /// Properly place and notify telegram of a new event
     fn new_event(&mut self, event: Event, now: DateTime<Utc>) {
         debug!("Handling event");
 
