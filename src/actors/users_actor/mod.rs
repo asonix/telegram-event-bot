@@ -68,6 +68,7 @@ impl UsersActor {
 
     fn touch_user(&mut self, user_id: Integer, chat_id: Integer) -> UserState {
         if !self.chats.contains(&chat_id) {
+            debug!("Chat isn't known");
             return UserState::InvalidQuery;
         }
 

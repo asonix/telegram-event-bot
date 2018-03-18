@@ -155,9 +155,11 @@ impl TelegramActor {
                         .then(flatten::<TouchUser>)
                         .map(move |user_state| match user_state {
                             UserState::NewRelation => {
+                                debug!("Sending NewRelation");
                                 db.send(NewRelation { chat_id, user_id });
                             }
                             UserState::NewUser => {
+                                debug!("Sending NewUser");
                                 db.send(NewUser {
                                     chat_id,
                                     user_id,
@@ -337,9 +339,11 @@ impl TelegramActor {
                                 .and_then(move |user_state| {
                                     Ok(match user_state {
                                         UserState::NewRelation => {
+                                            debug!("Sending NewRelation");
                                             db.send(NewRelation { chat_id, user_id });
                                         }
                                         UserState::NewUser => {
+                                            debug!("Sending NewUser");
                                             db.send(NewUser {
                                                 chat_id,
                                                 user_id,
