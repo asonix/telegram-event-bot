@@ -30,6 +30,3 @@ features = ["with-chrono"]
 [dependencies.event-web]
 version = "0.1"
 path = "./event-web"
-
-[patch.crates-io]
-parse-zoneinfo = { git = "https://github.com/asonix/parse-zoneinfo.git", branch = "asonix/fix-regex" }
