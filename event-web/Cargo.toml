@@ -1,7 +1,12 @@
 [package]
 name = "event-web"
+description = "The Web UI for Telegram Event Bot"
 version = "0.1.0"
-authors = ["Riley Trautman <rileyt@spiceworks.com>"]
+license = "AGPL-3.0"
+authors = ["Riley Trautman <asonix.dev@gmail.com>"]
+repository = "https://github.com/asonix/telegram-event-bot"
+readme = "README.md"
+keywords = ["telegram", "events", "bot"]
 
 [dependencies]
 actix = "0.4"
