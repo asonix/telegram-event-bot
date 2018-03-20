@@ -825,10 +825,29 @@ impl TelegramActor {
             .collect()
             .and_then(move |buttons| {
                 let msg = if buttons.len() > 0 {
+                    let buttons = buttons.into_iter().fold(
+                        Vec::new(),
+                        |mut acc: Vec<Vec<_>>, button| {
+                            let len = acc.len();
+
+                            if len > 0 {
+                                if acc[len - 1].len() < 2 {
+                                    acc[len - 1].push(button);
+                                } else {
+                                    acc.push(vec![button]);
+                                }
+                            } else {
+                                acc.push(vec![button]);
+                            }
+
+                            acc
+                        },
+                    );
+
                     bot2.message(
                         chat_id,
                         "Which channel would you like to create an event for?".to_owned(),
-                    ).reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                    ).reply_markup(InlineKeyboardMarkup::new(buttons))
                 } else {
                     bot2.message(chat_id, "You aren't in any chats with an associated events channel. If you believe this a mistake, please send a message in the associated chat first, then try again".to_owned())
                 };
@@ -858,8 +877,27 @@ impl TelegramActor {
             .collect()
             .and_then(move |buttons| {
                 let msg = if buttons.len() > 0 {
+                    let buttons = buttons.into_iter().fold(
+                        Vec::new(),
+                        |mut acc: Vec<Vec<_>>, button| {
+                            let len = acc.len();
+
+                            if len > 0 {
+                                if acc[len - 1].len() < 2 {
+                                    acc[len - 1].push(button);
+                                } else {
+                                    acc.push(vec![button]);
+                                }
+                            } else {
+                                acc.push(vec![button]);
+                            }
+
+                            acc
+                        },
+                    );
+
                     bot2.message(chat_id, "Which event would you like to delete?".to_owned())
-                        .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                        .reply_markup(InlineKeyboardMarkup::new(buttons))
                 } else {
                     bot2.message(chat_id, "You aren't hosting any events".to_owned())
                 };
