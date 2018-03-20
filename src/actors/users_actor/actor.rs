@@ -41,23 +41,6 @@ impl Actor for UsersActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         let db = self.db.clone();
 
-        // add a stream that adds users from the database to the UsersActor's store
-        ctx.add_stream(
-            db.send(GetUsersWithChats)
-                .then(flatten)
-                .into_stream()
-                .and_then(|users_with_chats: Vec<(User, Chat)>| {
-                    Ok(iter_ok(
-                        users_with_chats
-                            .into_iter()
-                            .map(|(u, c)| TouchUser(u.user_id(), c.chat_id())),
-                    ))
-                })
-                .flatten(),
-        );
-
-        let db = self.db.clone();
-
         // add a stream that adds channels from the database to the UsersActor's store
         ctx.add_stream(
             db.send(GetSystemsWithChats)
@@ -82,6 +65,10 @@ impl StreamHandler<TouchUser, EventError> for UsersActor {
         error!("Error in TouchUser: {:?}", err);
         Running::Continue
     }
+
+    fn finished(&mut self, _: &mut Self::Context) {
+        debug!("Done importing Users");
+    }
 }
 
 impl StreamHandler<TouchChannel, EventError> for UsersActor {
@@ -92,6 +79,26 @@ impl StreamHandler<TouchChannel, EventError> for UsersActor {
     fn error(&mut self, err: EventError, _: &mut Self::Context) -> Running {
         error!("Error in TouchChannel: {:?}", err);
         Running::Continue
+    }
+
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        debug!("Done importing Channels");
+        let db = self.db.clone();
+
+        // add a stream that adds users from the database to the UsersActor's store
+        ctx.add_stream(
+            db.send(GetUsersWithChats)
+                .then(flatten)
+                .into_stream()
+                .and_then(|users_with_chats: Vec<(User, Chat)>| {
+                    Ok(iter_ok(
+                        users_with_chats
+                            .into_iter()
+                            .map(|(u, c)| TouchUser(u.user_id(), c.chat_id())),
+                    ))
+                })
+                .flatten(),
+        );
     }
 }
 

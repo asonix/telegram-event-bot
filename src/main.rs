@@ -86,15 +86,16 @@ fn main() {
 
     let db_url = prepare_database_connection().unwrap();
 
-    let db_broker: Addr<Unsync, _> = DbBroker::new(db_url, 10).start();
-    let db_broker2 = db_broker.clone();
-
-    let users_actor = UsersActor::new(db_broker.clone()).start();
+    let db_broker: Addr<Unsync, _> = DbBroker::new(db_url.clone(), 5).start();
 
     let bot = RcBot::new(Arbiter::handle().clone(), &bot_token()).timeout(30);
 
     let telegram_actor: Addr<Syn, _> =
-        Supervisor::start(move |_| TelegramActor::new(url(), bot, db_broker2, users_actor));
+        Supervisor::start(move |_| {
+            let db_broker: Addr<Unsync, _> = DbBroker::new(db_url, 5).start();
+
+            TelegramActor::new(url(), bot, db_broker.clone(), UsersActor::new(db_broker).start())
+        });
 
     telegram_actor.do_send(StartStreaming);
 
