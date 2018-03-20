@@ -23,7 +23,7 @@
 use std::fmt::Debug;
 use std::collections::HashSet;
 
-use actix::{Address, Arbiter};
+use actix::{Addr, Arbiter, Syn, Unsync};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
 use chrono_tz::US::Central;
 use futures::{Future, Stream};
@@ -76,12 +76,17 @@ pub enum CallbackQueryMessage {
 pub struct TelegramActor {
     url: String,
     bot: RcBot,
-    db: Address<DbBroker>,
-    users: Address<UsersActor>,
+    db: Addr<Unsync, DbBroker>,
+    users: Addr<Syn, UsersActor>,
 }
 
 impl TelegramActor {
-    pub fn new(url: String, bot: RcBot, db: Address<DbBroker>, users: Address<UsersActor>) -> Self {
+    pub fn new(
+        url: String,
+        bot: RcBot,
+        db: Addr<Unsync, DbBroker>,
+        users: Addr<Syn, UsersActor>,
+    ) -> Self {
         TelegramActor {
             url,
             bot,
@@ -117,21 +122,21 @@ impl TelegramActor {
                 // Spawn a future that handles removing a user from a chat
                 Arbiter::handle().spawn(
                     self.users
-                        .call_fut(RemoveRelation(user_id, chat_id))
-                        .then(flatten::<RemoveRelation>)
+                        .send(RemoveRelation(user_id, chat_id))
+                        .then(flatten)
                         .map(move |delete_state| {
                             match delete_state {
                                 DeleteState::UserEmpty => Arbiter::handle().spawn(
-                                    db.call_fut(DeleteUserByUserId(user_id))
-                                        .then(flatten::<DeleteUserByUserId>)
+                                    db.send(DeleteUserByUserId(user_id))
+                                        .then(flatten)
                                         .map_err(|e| error!("Error deleting User: {:?}", e)),
                                 ),
                                 _ => (),
                             }
 
                             Arbiter::handle().spawn(
-                                db.call_fut(RemoveUserChat(user_id, chat_id))
-                                    .then(flatten::<RemoveUserChat>)
+                                db.send(RemoveUserChat(user_id, chat_id))
+                                    .then(flatten)
                                     .map_err(|e| error!("Error removing UserChat: {:?}", e)),
                             );
                         })
@@ -151,16 +156,16 @@ impl TelegramActor {
                 // Spawn a future that handles adding a user to a chat
                 Arbiter::handle().spawn(
                     self.users
-                        .call_fut(TouchUser(user_id, chat_id))
-                        .then(flatten::<TouchUser>)
+                        .send(TouchUser(user_id, chat_id))
+                        .then(flatten)
                         .map(move |user_state| match user_state {
                             UserState::NewRelation => {
                                 debug!("Sending NewRelation");
-                                db.send(NewRelation { chat_id, user_id });
+                                db.do_send(NewRelation { chat_id, user_id });
                             }
                             UserState::NewUser => {
                                 debug!("Sending NewUser");
-                                db.send(NewUser {
+                                db.do_send(NewUser {
                                     chat_id,
                                     user_id,
                                     username,
@@ -186,8 +191,8 @@ impl TelegramActor {
                         // create an event for
                         Arbiter::handle().spawn(
                             self.users
-                                .call_fut(LookupChannels(user.id))
-                                .then(flatten::<LookupChannels>)
+                                .send(LookupChannels(user.id))
+                                .then(flatten)
                                 .then(move |chats| match chats {
                                     Ok(chats) => Ok(TelegramActor::ask_chats(bot, chats, chat_id)),
                                     Err(e) => {
@@ -218,8 +223,8 @@ impl TelegramActor {
                         // Users can only edit events they host
                         Arbiter::handle().spawn(
                             self.db
-                                .call_fut(LookupEventsByUserId { user_id: user.id })
-                                .then(flatten::<LookupEventsByUserId>)
+                                .send(LookupEventsByUserId { user_id: user.id })
+                                .then(flatten)
                                 .then(move |events| match events {
                                     Ok(events) => {
                                         Ok(TelegramActor::ask_events(bot, events, chat_id))
@@ -252,8 +257,8 @@ impl TelegramActor {
                         // Users can only delete events they host.
                         Arbiter::handle().spawn(
                             self.db
-                                .call_fut(LookupEventsByUserId { user_id: user.id })
-                                .then(flatten::<LookupEventsByUserId>)
+                                .send(LookupEventsByUserId { user_id: user.id })
+                                .then(flatten)
                                 .then(move |events| match events {
                                     Ok(events) => {
                                         Ok(TelegramActor::ask_delete_events(bot, events, chat_id))
@@ -296,8 +301,8 @@ impl TelegramActor {
                         // Spawn a future that handles printing the events for a given chat
                         Arbiter::handle().spawn(
                             self.db
-                                .call_fut(LookupEventsByChatId { chat_id })
-                                .then(flatten::<LookupEventsByChatId>)
+                                .send(LookupEventsByChatId { chat_id })
+                                .then(flatten)
                                 .then(move |events| match events {
                                     Ok(events) => {
                                         Ok(TelegramActor::send_events(&bot, chat_id, events))
@@ -334,17 +339,17 @@ impl TelegramActor {
                         // Spawn a future that handles updating a user/chat relation
                         Arbiter::handle().spawn(
                             self.users
-                                .call_fut(TouchUser(user_id, chat_id))
-                                .then(flatten::<TouchUser>)
+                                .send(TouchUser(user_id, chat_id))
+                                .then(flatten)
                                 .and_then(move |user_state| {
                                     Ok(match user_state {
                                         UserState::NewRelation => {
                                             debug!("Sending NewRelation");
-                                            db.send(NewRelation { chat_id, user_id });
+                                            db.do_send(NewRelation { chat_id, user_id });
                                         }
                                         UserState::NewUser => {
                                             debug!("Sending NewUser");
-                                            db.send(NewUser {
+                                            db.do_send(NewUser {
                                                 chat_id,
                                                 user_id,
                                                 username,
@@ -380,7 +385,7 @@ impl TelegramActor {
                         .into_iter()
                         .filter_map(|chat_id| chat_id.parse::<Integer>().ok())
                         .map(|chat_id| {
-                            self.users.send(TouchChannel(channel_id, chat_id));
+                            self.users.do_send(TouchChannel(channel_id, chat_id));
 
                             chat_id
                         })
@@ -396,7 +401,7 @@ impl TelegramActor {
                             })
                             .and_then(move |(chat_ids, bot)| {
                                 for chat_id in chat_ids.iter() {
-                                    db.send(NewChat {
+                                    db.do_send(NewChat {
                                         channel_id: channel_id,
                                         chat_id: *chat_id,
                                     });
@@ -426,8 +431,8 @@ impl TelegramActor {
                     // Spawn a future that adds the given channel to the database
                     Arbiter::handle().spawn(
                         self.db
-                            .call_fut(NewChannel { channel_id })
-                            .then(flatten::<NewChannel>)
+                            .send(NewChannel { channel_id })
+                            .then(flatten)
                             .then(move |res| match res {
                                 Ok(item) => Ok((item, bot)),
                                 Err(err) => Err((err, bot)),
@@ -479,18 +484,18 @@ impl TelegramActor {
                                     debug!("channel_id: {}", channel_id);
                                     Arbiter::handle().spawn(
                                         self.db
-                                            .call_fut(LookupUser(user_id))
-                                            .then(flatten::<LookupUser>)
+                                            .send(LookupUser(user_id))
+                                            .then(flatten)
                                             .and_then(move |user| {
-                                                db.call_fut(LookupSystemByChannel(channel_id))
-                                                    .then(flatten::<LookupSystemByChannel>)
+                                                db.send(LookupSystemByChannel(channel_id))
+                                                    .then(flatten)
                                                     .map(|chat_system| (chat_system, user))
                                             })
                                             .and_then(move |(chat_system, user)| {
                                                 let events_channel = chat_system.events_channel();
                                                 users
-                                                    .call_fut(LookupChannels(user.user_id()))
-                                                    .then(flatten::<LookupChannels>)
+                                                    .send(LookupChannels(user.user_id()))
+                                                    .then(flatten)
                                                     .and_then(move |channel_ids| {
                                                         if channel_ids.contains(&events_channel) {
                                                             Ok(())
@@ -499,11 +504,11 @@ impl TelegramActor {
                                                         }
                                                     })
                                                     .and_then(move |_| {
-                                                        db2.call_fut(StoreEventLink {
+                                                        db2.send(StoreEventLink {
                                                             user_id: user.id(),
                                                             system_id: chat_system.id(),
                                                             secret,
-                                                        }).then(flatten::<StoreEventLink>)
+                                                        }).then(flatten)
                                                     })
                                             })
                                             .then(move |nel| match nel {
@@ -534,8 +539,8 @@ impl TelegramActor {
                                     // Spawn a future that updates a given event
                                     Arbiter::handle().spawn(
                                         self.db
-                                            .call_fut(LookupEvent { event_id })
-                                            .then(flatten::<LookupEvent>)
+                                            .send(LookupEvent { event_id })
+                                            .then(flatten)
                                             .and_then(move |event| {
                                                 if event
                                                     .hosts()
@@ -554,12 +559,12 @@ impl TelegramActor {
                                                     .find(|host| host.user_id() == user_id)
                                                     .unwrap();
 
-                                                db2.call_fut(StoreEditEventLink {
+                                                db2.send(StoreEditEventLink {
                                                     user_id: host.id(),
                                                     system_id: event.system_id(),
                                                     event_id: event.id(),
                                                     secret,
-                                                }).then(flatten::<StoreEditEventLink>)
+                                                }).then(flatten)
                                             })
                                             .then(move |eel| match eel {
                                                 Ok(eel) => Ok(TelegramActor::send_url(
@@ -592,11 +597,10 @@ impl TelegramActor {
                                 } => Arbiter::handle().spawn(
                                     // Spawn a future taht deletes the given event
                                     self.db
-                                        .call_fut(DeleteEvent { event_id })
-                                        .then(flatten::<DeleteEvent>)
+                                        .send(DeleteEvent { event_id })
+                                        .then(flatten)
                                         .and_then(move |_| {
-                                            db.call_fut(LookupSystem { system_id })
-                                                .then(flatten::<LookupSystem>)
+                                            db.send(LookupSystem { system_id }).then(flatten)
                                         })
                                         .then(move |chat_system| match chat_system {
                                             Ok(chat_system) => Ok(TelegramActor::event_deleted(
@@ -628,10 +632,10 @@ impl TelegramActor {
         let bot = self.bot.clone();
 
         let fut = self.db
-            .call_fut(LookupSystem {
+            .send(LookupSystem {
                 system_id: event.system_id(),
             })
-            .then(flatten::<LookupSystem>)
+            .then(flatten)
             .and_then(move |chat_system| {
                 bot.message(
                     chat_system.events_channel(),
@@ -652,8 +656,8 @@ impl TelegramActor {
         let system_id = event.system_id();
 
         let fut = self.db
-            .call_fut(LookupSystem { system_id })
-            .then(flatten::<LookupSystem>)
+            .send(LookupSystem { system_id })
+            .then(flatten)
             .and_then(move |chat_system| {
                 bot.message(
                     chat_system.events_channel(),
@@ -673,10 +677,10 @@ impl TelegramActor {
         let bot = self.bot.clone();
 
         let fut = self.db
-            .call_fut(LookupSystem {
+            .send(LookupSystem {
                 system_id: event.system_id(),
             })
-            .then(flatten::<LookupSystem>)
+            .then(flatten)
             .and_then(move |chat_system| {
                 bot.message(
                     chat_system.events_channel(),
@@ -705,10 +709,10 @@ impl TelegramActor {
         let bot = self.bot.clone();
 
         let fut = self.db
-            .call_fut(LookupSystem {
+            .send(LookupSystem {
                 system_id: event.system_id(),
             })
-            .then(flatten::<LookupSystem>)
+            .then(flatten)
             .and_then(move |chat_system| {
                 bot.message(
                     chat_system.events_channel(),
@@ -738,10 +742,10 @@ impl TelegramActor {
         let bot = self.bot.clone();
 
         let fut = self.db
-            .call_fut(LookupSystem {
+            .send(LookupSystem {
                 system_id: event.system_id(),
             })
-            .then(flatten::<LookupSystem>)
+            .then(flatten)
             .and_then(move |chat_system| {
                 bot.message(
                     chat_system.events_channel(),
@@ -766,15 +770,15 @@ impl TelegramActor {
         let bot = self.bot.clone();
 
         let fut = self.db
-            .call_fut(LookupSystem { system_id })
-            .then(flatten::<LookupSystem>)
+            .send(LookupSystem { system_id })
+            .then(flatten)
             .map_err(|e| {
                 error!("LookupSystem");
                 e
             })
             .and_then(move |chat_system: ChatSystem| {
-                db.call_fut(GetEventsForSystem { system_id })
-                    .then(flatten::<GetEventsForSystem>)
+                db.send(GetEventsForSystem { system_id })
+                    .then(flatten)
                     .map_err(|e| {
                         error!("GetEventsForSystem");
                         e

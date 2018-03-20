@@ -24,8 +24,10 @@
 //! handle incoming events like Telegram Updates, or a failed Telegram Update Stream. Other actors
 //! send this actor messages as a proxy to talk to Telegram.
 
-use actix::{Actor, Address, Arbiter, AsyncContext, Context, Handler, Supervised};
-use futures::{Future, Stream};
+use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, Running, StreamHandler,
+            Supervised, Unsync};
+use futures::{Future, IntoFuture, Stream};
+use futures::future::Either;
 use futures::stream::{iter_ok, repeat};
 use telebot::functions::*;
 use telebot::objects::Update;
@@ -48,12 +50,12 @@ impl Supervised for TelegramActor {
         debug!("Restarting telegram message actor!");
         self.bot = RcBot::new(Arbiter::handle().clone(), &self.bot.inner.key);
 
-        ctx.address::<Address<_>>().send(StartStreaming);
+        ctx.address::<Addr<Unsync, _>>().do_send(StartStreaming);
     }
 }
 
 impl Handler<NewEvent> for TelegramActor {
-    type Result = ();
+    type Result = <NewEvent as Message>::Result;
 
     fn handle(&mut self, msg: NewEvent, _: &mut Self::Context) -> Self::Result {
         self.new_event(msg.0);
@@ -61,7 +63,7 @@ impl Handler<NewEvent> for TelegramActor {
 }
 
 impl Handler<UpdateEvent> for TelegramActor {
-    type Result = ();
+    type Result = <UpdateEvent as Message>::Result;
 
     fn handle(&mut self, msg: UpdateEvent, _: &mut Self::Context) -> Self::Result {
         self.update_event(msg.0);
@@ -69,7 +71,7 @@ impl Handler<UpdateEvent> for TelegramActor {
 }
 
 impl Handler<EventSoon> for TelegramActor {
-    type Result = ();
+    type Result = <EventSoon as Message>::Result;
 
     fn handle(&mut self, msg: EventSoon, _: &mut Self::Context) -> Self::Result {
         self.event_soon(msg.0);
@@ -77,7 +79,7 @@ impl Handler<EventSoon> for TelegramActor {
 }
 
 impl Handler<EventStarted> for TelegramActor {
-    type Result = ();
+    type Result = <EventStarted as Message>::Result;
 
     fn handle(&mut self, msg: EventStarted, _: &mut Self::Context) -> Self::Result {
         self.event_started(msg.0);
@@ -85,42 +87,54 @@ impl Handler<EventStarted> for TelegramActor {
 }
 
 impl Handler<EventOver> for TelegramActor {
-    type Result = ();
+    type Result = <EventOver as Message>::Result;
 
     fn handle(&mut self, msg: EventOver, _: &mut Self::Context) -> Self::Result {
         self.event_over(msg.0);
     }
 }
-impl Handler<Result<TgUpdate, EventError>> for TelegramActor {
-    type Result = ();
 
-    fn handle(
-        &mut self,
-        msg: Result<TgUpdate, EventError>,
-        ctx: &mut Self::Context,
-    ) -> Self::Result {
+impl Handler<TgUpdate> for TelegramActor {
+    type Result = <TgUpdate as Message>::Result;
+
+    fn handle(&mut self, msg: TgUpdate, _: &mut Self::Context) {
         debug!("Handling update");
-        match msg {
-            Ok(tg_update) => self.handle_update(tg_update.update),
-            Err(err) => {
-                error!("Error {:?}", err);
-                ctx.address::<Address<_>>().send(StartStreaming);
-            }
-        }
+        self.handle_update(msg.update);
+    }
+}
+
+impl StreamHandler<TgUpdate, EventError> for TelegramActor {
+    fn handle(&mut self, msg: TgUpdate, _: &mut Self::Context) {
+        debug!("Handling update");
+        self.handle_update(msg.update);
+    }
+
+    fn error(&mut self, err: EventError, _: &mut Self::Context) -> Running {
+        error!("Error {:?}", err);
+        // don't stop on stream error
+        Running::Continue
+    }
+
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        // if stream is over, start it again
+        ctx.address::<Addr<Unsync, _>>().do_send(StartStreaming);
     }
 }
 
 impl Handler<StartStreaming> for TelegramActor {
-    type Result = ();
+    type Result = <StartStreaming as Message>::Result;
 
     fn handle(&mut self, _: StartStreaming, ctx: &mut Self::Context) -> Self::Result {
-        let addr: Address<_> = ctx.address();
+        let addr: Addr<Unsync, _> = ctx.address();
 
         Arbiter::handle().spawn(
             bot_stream(self.bot.clone())
                 .then(move |res| match res {
-                    Ok((bot, update)) => addr.call_fut(Ok(TgUpdate { bot, update })),
-                    Err(e) => addr.call_fut(Err(e)),
+                    Ok((bot, update)) => Either::A(addr.send(TgUpdate { bot, update }).map(|_| ())),
+                    Err(e) => {
+                        error!("Error: {:?}", e);
+                        Either::B(Ok(()).into_future())
+                    }
                 })
                 .map_err(|e| error!("Error: {:?}", e))
                 .for_each(|_| Ok(())),

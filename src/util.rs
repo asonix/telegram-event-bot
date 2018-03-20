@@ -23,9 +23,8 @@
 //! `prepare_error` function can be used after calling `Connection::prepare(connection, sql)` to
 //! translate the resulting tokio_postgres::Error into an error::Error
 
-use actix::ResponseType;
+use actix::MailboxError;
 use failure::Fail;
-use futures::sync::oneshot::Canceled;
 use tokio_postgres::{Connection, Error as TpError};
 use tokio_postgres::transaction::Transaction;
 
@@ -94,18 +93,14 @@ pub(crate) fn commit_error((error, connection): (TpError, Connection)) -> (Event
     (error.context(EventErrorKind::Commit).into(), connection)
 }
 
-/// Flatten the result of a call to `addr.call_fut()` from a `Result<Result<_, _>, _>` into a
+/// Flatten the result of a call to `addr.send()` from a `Result<Result<_, _>, _>` into a
 /// `Result<_, _>` by combining the error types
 ///
-/// This can be used when chaining futures like `Address::call_fut(addr,
-/// msg).then(flatten::<Msg>())`
+/// This can be used when chaining futures like `Address::send(addr,
+/// msg).then(flatten())`
 pub(crate) fn flatten<T>(
-    msg_res: Result<Result<T::Item, T::Error>, Canceled>,
-) -> Result<T::Item, T::Error>
-where
-    T: ResponseType,
-    T::Error: From<EventError>,
-{
+    msg_res: Result<Result<T, EventError>, MailboxError>,
+) -> Result<T, EventError> {
     match msg_res {
         Ok(res) => res,
         Err(e) => Err(EventError::from(e.context(EventErrorKind::Canceled)).into()),

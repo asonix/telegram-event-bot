@@ -21,7 +21,7 @@
 
 use std::collections::HashSet;
 
-use actix::ResponseType;
+use actix::Message;
 use telebot::objects::Integer;
 
 use error::EventError;
@@ -31,43 +31,38 @@ use super::{DeleteState, UserState};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TouchUser(pub Integer, pub Integer);
 
-impl ResponseType for TouchUser {
-    type Item = UserState;
-    type Error = EventError;
+impl Message for TouchUser {
+    type Result = Result<UserState, EventError>;
 }
 
 /// This type is for looking up chats for a given user
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LookupChats(pub Integer);
 
-impl ResponseType for LookupChats {
-    type Item = HashSet<Integer>;
-    type Error = EventError;
+impl Message for LookupChats {
+    type Result = Result<HashSet<Integer>, EventError>;
 }
 
 /// This type is for looking up channels for a given user
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LookupChannels(pub Integer);
 
-impl ResponseType for LookupChannels {
-    type Item = HashSet<Integer>;
-    type Error = EventError;
+impl Message for LookupChannels {
+    type Result = Result<HashSet<Integer>, EventError>;
 }
 
 /// This type is for ensuring a relationship between a channel and a chat
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TouchChannel(pub Integer, pub Integer);
 
-impl ResponseType for TouchChannel {
-    type Item = ();
-    type Error = ();
+impl Message for TouchChannel {
+    type Result = ();
 }
 
 /// This type is for removing a user from a chat
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RemoveRelation(pub Integer, pub Integer);
 
-impl ResponseType for RemoveRelation {
-    type Item = DeleteState;
-    type Error = EventError;
+impl Message for RemoveRelation {
+    type Result = Result<DeleteState, EventError>;
 }

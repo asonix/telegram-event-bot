@@ -20,7 +20,7 @@
 //! This module defines the types that the `TelegramActor` accepts as messages. They come in two
 //! classes: Those that the `TelegramActor` sends itself, and those that other actors send.
 
-use actix::ResponseType;
+use actix::Message;
 use telebot::objects::Update;
 use telebot::RcBot;
 
@@ -34,18 +34,16 @@ pub struct TgUpdate {
     pub update: Update,
 }
 
-impl ResponseType for TgUpdate {
-    type Item = ();
-    type Error = ();
+impl Message for TgUpdate {
+    type Result = ();
 }
 
 /// This message instructs the actor to start the Telegram Update stream. It is sent when the actor
 /// crashes and restarts, or when the stream errors and needs to restart.
 pub struct StartStreaming;
 
-impl ResponseType for StartStreaming {
-    type Item = ();
-    type Error = ();
+impl Message for StartStreaming {
+    type Result = ();
 }
 
 /// This message is to alert the required channel that an event is starting soon. The Timer actor
@@ -53,9 +51,8 @@ impl ResponseType for StartStreaming {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventSoon(pub Event);
 
-impl ResponseType for EventSoon {
-    type Item = ();
-    type Error = ();
+impl Message for EventSoon {
+    type Result = ();
 }
 
 /// This message is to alert the required channel that an event has started. The Timer actor
@@ -63,9 +60,8 @@ impl ResponseType for EventSoon {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventStarted(pub Event);
 
-impl ResponseType for EventStarted {
-    type Item = ();
-    type Error = ();
+impl Message for EventStarted {
+    type Result = ();
 }
 
 /// This message is to alert the required channel that an event is over. The Timer actor produces
@@ -73,25 +69,22 @@ impl ResponseType for EventStarted {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventOver(pub Event);
 
-impl ResponseType for EventOver {
-    type Item = ();
-    type Error = ();
+impl Message for EventOver {
+    type Result = ();
 }
 
 /// This message is to alert the require channel that an event has been created.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewEvent(pub Event);
 
-impl ResponseType for NewEvent {
-    type Item = ();
-    type Error = ();
+impl Message for NewEvent {
+    type Result = ();
 }
 
 /// This message is to alert the required channel that an event has been updated.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpdateEvent(pub Event);
 
-impl ResponseType for UpdateEvent {
-    type Item = ();
-    type Error = ();
+impl Message for UpdateEvent {
+    type Result = ();
 }

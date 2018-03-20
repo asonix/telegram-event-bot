@@ -49,7 +49,7 @@ mod error;
 mod models;
 mod util;
 
-use actix::{Actor, Address, Arbiter, Supervisor, SyncAddress, System};
+use actix::{Actor, Addr, Arbiter, Supervisor, Syn, System, Unsync};
 use dotenv::dotenv;
 use actors::db_broker::DbBroker;
 use actors::event_actor::EventActor;
@@ -86,22 +86,21 @@ fn main() {
 
     let db_url = prepare_database_connection().unwrap();
 
-    let db_broker: Address<_> = DbBroker::new(db_url, 10).start();
+    let db_broker: Addr<Unsync, _> = DbBroker::new(db_url, 10).start();
     let db_broker2 = db_broker.clone();
 
     let users_actor = UsersActor::new(db_broker.clone()).start();
 
     let bot = RcBot::new(Arbiter::handle().clone(), &bot_token()).timeout(30);
 
-    let telegram_actor: Address<_> =
+    let telegram_actor: Addr<Syn, _> =
         Supervisor::start(move |_| TelegramActor::new(url(), bot, db_broker2, users_actor));
 
-    telegram_actor.send(StartStreaming);
+    telegram_actor.do_send(StartStreaming);
 
-    let timer: Address<_> = Timer::new(db_broker.clone(), telegram_actor.clone()).start();
+    let timer: Addr<Syn, _> = Timer::new(db_broker.clone(), telegram_actor.clone()).start();
 
-    let sync_event_actor: SyncAddress<_> =
-        EventActor::new(telegram_actor, db_broker, timer).start();
+    let sync_event_actor: Addr<Syn, _> = EventActor::new(telegram_actor, db_broker, timer).start();
     event_web::start(sync_event_actor, "0.0.0.0:8000", None);
 
     sys.run();

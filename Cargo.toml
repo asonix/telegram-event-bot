@@ -9,7 +9,7 @@ readme = "README.md"
 keywords = ["telegram", "events", "bot"]
 
 [dependencies]
-actix = "0.4"
+actix = "0.5"
 base-x = "0.2"
 chrono = "0.4"
 chrono-tz = "0.4"

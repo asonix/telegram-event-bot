@@ -23,7 +23,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use actix::{Address, Arbiter};
+use actix::{Addr, Arbiter, Syn, Unsync};
 use chrono::{DateTime, Duration as OldDuration, Timelike};
 use chrono::offset::Utc;
 use chrono_tz::Tz;
@@ -48,8 +48,8 @@ enum TimerState {
 }
 
 pub struct Timer {
-    db: Address<DbBroker>,
-    tg: Address<TelegramActor>,
+    db: Addr<Unsync, DbBroker>,
+    tg: Addr<Syn, TelegramActor>,
     waiting_notify: Vec<HashSet<i32>>,
     waiting_start: Vec<HashSet<i32>>,
     waiting_end: Vec<HashSet<i32>>,
@@ -59,7 +59,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new(db: Address<DbBroker>, tg: Address<TelegramActor>) -> Self {
+    pub fn new(db: Addr<Unsync, DbBroker>, tg: Addr<Syn, TelegramActor>) -> Self {
         Timer {
             db,
             tg,
@@ -176,11 +176,11 @@ impl Timer {
         let now = Utc::now();
 
         self.db
-            .call_fut(GetEventsInRange {
+            .send(GetEventsInRange {
                 start_date: (now - OldDuration::hours(1)).with_timezone(&Tz::UTC),
                 end_date: (now + OldDuration::hours(1)).with_timezone(&Tz::UTC),
             })
-            .then(flatten::<GetEventsInRange>)
+            .then(flatten)
     }
 
     fn handle_events(&mut self, events: Vec<Event>) {
@@ -284,11 +284,11 @@ impl Timer {
     }
 
     fn notify_soon(&self, event: Event) {
-        self.tg.send(EventSoon(event));
+        self.tg.do_send(EventSoon(event));
     }
 
     fn notify_now(&self, event: Event) {
-        self.tg.send(EventStarted(event));
+        self.tg.do_send(EventStarted(event));
     }
 
     fn delete_event(&self, event: Event) {
@@ -296,12 +296,12 @@ impl Timer {
 
         Arbiter::handle().spawn(
             self.db
-                .call_fut(DeleteEvent {
+                .send(DeleteEvent {
                     event_id: event.id(),
                 })
-                .then(flatten::<DeleteEvent>)
+                .then(flatten)
                 .map(move |_| {
-                    tg.send(EventOver(event));
+                    tg.do_send(EventOver(event));
                 })
                 .map_err(|e| error!("Error: {:?}", e)),
         );

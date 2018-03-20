@@ -21,7 +21,7 @@
 
 use std::collections::HashSet;
 
-use actix::{Actor, AsyncContext, Context, Handler};
+use actix::{Actor, AsyncContext, Context, Handler, Message, Running, StreamHandler};
 use futures::{Future, Stream};
 use futures::stream::iter_ok;
 use telebot::objects::Integer;
@@ -31,7 +31,7 @@ use actors::db_broker::messages::{GetSystemsWithChats, GetUsersWithChats};
 use models::user::User;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;
-use super::{DeleteState, UserState, UsersActor};
+use super::{DeleteState, UsersActor};
 use super::messages::*;
 use util::flatten;
 
@@ -43,8 +43,8 @@ impl Actor for UsersActor {
 
         // add a stream that adds users from the database to the UsersActor's store
         ctx.add_stream(
-            db.call_fut(GetUsersWithChats)
-                .then(flatten::<GetUsersWithChats>)
+            db.send(GetUsersWithChats)
+                .then(flatten)
                 .into_stream()
                 .and_then(|users_with_chats: Vec<(User, Chat)>| {
                     Ok(iter_ok(
@@ -60,8 +60,8 @@ impl Actor for UsersActor {
 
         // add a stream that adds channels from the database to the UsersActor's store
         ctx.add_stream(
-            db.call_fut(GetSystemsWithChats)
-                .then(flatten::<GetSystemsWithChats>)
+            db.send(GetSystemsWithChats)
+                .then(flatten)
                 .into_stream()
                 .and_then(|systems_with_chats: Vec<(ChatSystem, Chat)>| {
                     Ok(iter_ok(systems_with_chats.into_iter().map(|(s, c)| {
@@ -73,34 +73,30 @@ impl Actor for UsersActor {
     }
 }
 
-impl Handler<Result<TouchUser, EventError>> for UsersActor {
-    type Result = Result<UserState, ()>;
+impl StreamHandler<TouchUser, EventError> for UsersActor {
+    fn handle(&mut self, msg: TouchUser, _: &mut Self::Context) {
+        self.touch_user(msg.0, msg.1);
+    }
 
-    fn handle(
-        &mut self,
-        msg: Result<TouchUser, EventError>,
-        _: &mut Self::Context,
-    ) -> Self::Result {
-        msg.map(|msg| self.touch_user(msg.0, msg.1))
-            .map_err(|e| error!("Error: {:?}", e))
+    fn error(&mut self, err: EventError, _: &mut Self::Context) -> Running {
+        error!("Error in TouchUser: {:?}", err);
+        Running::Continue
     }
 }
 
-impl Handler<Result<TouchChannel, EventError>> for UsersActor {
-    type Result = ();
+impl StreamHandler<TouchChannel, EventError> for UsersActor {
+    fn handle(&mut self, msg: TouchChannel, _: &mut Self::Context) {
+        self.touch_channel(msg.0, msg.1);
+    }
 
-    fn handle(
-        &mut self,
-        msg: Result<TouchChannel, EventError>,
-        _: &mut Self::Context,
-    ) -> Self::Result {
-        let _ = msg.map(|msg| self.touch_channel(msg.0, msg.1))
-            .map_err(|e| error!("Error: {:?}", e));
+    fn error(&mut self, err: EventError, _: &mut Self::Context) -> Running {
+        error!("Error in TouchChannel: {:?}", err);
+        Running::Continue
     }
 }
 
 impl Handler<TouchUser> for UsersActor {
-    type Result = Result<UserState, EventError>;
+    type Result = <TouchUser as Message>::Result;
 
     fn handle(&mut self, msg: TouchUser, _: &mut Self::Context) -> Self::Result {
         Ok(self.touch_user(msg.0, msg.1))
@@ -108,7 +104,7 @@ impl Handler<TouchUser> for UsersActor {
 }
 
 impl Handler<TouchChannel> for UsersActor {
-    type Result = ();
+    type Result = <TouchChannel as Message>::Result;
 
     fn handle(&mut self, msg: TouchChannel, _: &mut Self::Context) -> Self::Result {
         self.touch_channel(msg.0, msg.1)

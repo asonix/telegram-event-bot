@@ -18,7 +18,7 @@
  */
 
 //! This module defines the EventActor. This actor handles callbacks from the web UI
-use actix::Address;
+use actix::{Addr, Syn, Unsync};
 use event_web::{Event as FrontendEvent, FrontendError, FrontendErrorKind};
 use event_web::verify_secret;
 use failure::Fail;
@@ -41,13 +41,17 @@ mod actor;
 /// events.
 #[derive(Clone)]
 pub struct EventActor {
-    tg: Address<TelegramActor>,
-    db: Address<DbBroker>,
-    timer: Address<Timer>,
+    tg: Addr<Syn, TelegramActor>,
+    db: Addr<Unsync, DbBroker>,
+    timer: Addr<Syn, Timer>,
 }
 
 impl EventActor {
-    pub fn new(tg: Address<TelegramActor>, db: Address<DbBroker>, timer: Address<Timer>) -> Self {
+    pub fn new(
+        tg: Addr<Syn, TelegramActor>,
+        db: Addr<Unsync, DbBroker>,
+        timer: Addr<Syn, Timer>,
+    ) -> Self {
         EventActor { tg, db, timer }
     }
 
@@ -81,8 +85,8 @@ impl EventActor {
             })
             .into_future()
             .and_then(move |(nel_id, base64d)| {
-                db.call_fut(LookupEventLink(nel_id))
-                    .then(flatten::<LookupEventLink>)
+                db.send(LookupEventLink(nel_id))
+                    .then(flatten)
                     .and_then(move |nel| match verify_secret(&base64d, nel.secret()) {
                         Ok(b) => if b {
                             // If the secret was verified, continue
@@ -95,11 +99,11 @@ impl EventActor {
                     })
                     .and_then(move |nel| {
                         database
-                            .call_fut(DeleteEventLink { id: nel.id() })
-                            .then(flatten::<DeleteEventLink>)
+                            .send(DeleteEventLink { id: nel.id() })
+                            .then(flatten)
                             .join(
                                 database
-                                    .call_fut(NewEvent {
+                                    .send(NewEvent {
                                         system_id: nel.system_id(),
                                         title: event.title().to_owned(),
                                         description: event.description().to_owned(),
@@ -107,10 +111,10 @@ impl EventActor {
                                         end_date: event.end_date(),
                                         hosts: vec![nel.user_id()],
                                     })
-                                    .then(flatten::<NewEvent>)
+                                    .then(flatten)
                                     .map(move |event| {
-                                        tg.send(TgNewEvent(event.clone()));
-                                        timer.send(Events {
+                                        tg.do_send(TgNewEvent(event.clone()));
+                                        timer.do_send(Events {
                                             events: vec![event],
                                         });
                                     }),
@@ -146,8 +150,8 @@ impl EventActor {
             .into_future()
             .and_then(move |(eel_id, base64d)| {
                 database
-                    .call_fut(LookupEditEventLink(eel_id))
-                    .then(flatten::<LookupEditEventLink>)
+                    .send(LookupEditEventLink(eel_id))
+                    .then(flatten)
                     .and_then(move |eel| match verify_secret(&base64d, eel.secret()) {
                         Ok(b) => if b {
                             Ok(eel)
@@ -158,10 +162,10 @@ impl EventActor {
                     })
                     .and_then(move |eel| {
                         database
-                            .call_fut(LookupEvent {
+                            .send(LookupEvent {
                                 event_id: eel.event_id(),
                             })
-                            .then(flatten::<LookupEvent>)
+                            .then(flatten)
                     })
             })
             .map(|event| {
@@ -203,8 +207,8 @@ impl EventActor {
             })
             .into_future()
             .and_then(move |(eel_id, base64d)| {
-                db.call_fut(LookupEditEventLink(eel_id))
-                    .then(flatten::<LookupEditEventLink>)
+                db.send(LookupEditEventLink(eel_id))
+                    .then(flatten)
                     .and_then(move |eel| match verify_secret(&base64d, eel.secret()) {
                         // Verify the secret is valid
                         Ok(b) => if b {
@@ -216,11 +220,11 @@ impl EventActor {
                     })
                     .and_then(move |eel| {
                         database
-                            .call_fut(DeleteEditEventLink { id: eel.id() })
-                            .then(flatten::<DeleteEditEventLink>)
+                            .send(DeleteEditEventLink { id: eel.id() })
+                            .then(flatten)
                             .join(
                                 database
-                                    .call_fut(EditEvent {
+                                    .send(EditEvent {
                                         id: eel.event_id(),
                                         system_id: eel.system_id(),
                                         title: event.title().to_owned(),
@@ -229,10 +233,10 @@ impl EventActor {
                                         end_date: event.end_date(),
                                         hosts: vec![eel.user_id()],
                                     })
-                                    .then(flatten::<NewEvent>)
+                                    .then(flatten)
                                     .map(move |event| {
-                                        tg.send(TgUpdateEvent(event.clone()));
-                                        timer.send(UpdateEvent { event });
+                                        tg.do_send(TgUpdateEvent(event.clone()));
+                                        timer.do_send(UpdateEvent { event });
                                     }),
                             )
                     })

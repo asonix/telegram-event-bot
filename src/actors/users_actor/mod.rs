@@ -21,7 +21,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use actix::Address;
+use actix::{Addr, Unsync};
 use telebot::objects::Integer;
 
 use actors::db_broker::DbBroker;
@@ -53,11 +53,11 @@ pub struct UsersActor {
     // maps channel_id to HashSet<ChatId>
     channels: HashMap<Integer, HashSet<Integer>>,
     chats: HashSet<Integer>,
-    db: Address<DbBroker>,
+    db: Addr<Unsync, DbBroker>,
 }
 
 impl UsersActor {
-    pub fn new(db: Address<DbBroker>) -> Self {
+    pub fn new(db: Addr<Unsync, DbBroker>) -> Self {
         UsersActor {
             users: HashMap::new(),
             channels: HashMap::new(),

@@ -9,9 +9,9 @@ readme = "README.md"
 keywords = ["telegram", "events", "bot"]
 
 [dependencies]
-actix = "0.4"
-actix-web = "0.3"
-bcrypt = "0.1"
+actix = "0.5"
+actix-web = "0.4"
+bcrypt = "0.2"
 chrono = "0.4"
 chrono-tz = "0.4"
 failure = "0.1"

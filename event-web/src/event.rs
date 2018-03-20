@@ -46,9 +46,8 @@ impl Event {
             end_date,
         }
     }
-    pub fn from_option(option_event: Option<OptionEvent>) -> Result<Self, FrontendError> {
-        CreateEvent::from_option(option_event.ok_or(FrontendErrorKind::MissingField)?)?
-            .try_to_event()
+    pub fn from_option(option_event: OptionEvent) -> Result<Self, FrontendError> {
+        CreateEvent::from_option(option_event)?.try_to_event()
     }
 
     pub fn title(&self) -> &str {

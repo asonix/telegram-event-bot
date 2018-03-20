@@ -51,36 +51,21 @@ impl ResponseError for FrontendError {
 
 #[derive(Clone, Copy, Debug, Eq, Fail, PartialEq)]
 pub enum FrontendErrorKind {
-    #[fail(display = "Error generating client secret")]
-    Generation,
-    #[fail(display = "Error verifying client secret")]
-    Verification,
-    #[fail(display = "Error generating response body")]
-    Body,
-    #[fail(display = "Error generating response")]
-    Response,
-    #[fail(display = "Missing a required field")]
-    MissingField,
-    #[fail(display = "Invalid timezone")]
-    BadTimeZone,
-    #[fail(display = "Invalid year")]
-    BadYear,
-    #[fail(display = "Invalid month")]
-    BadMonth,
-    #[fail(display = "Invalid day")]
-    BadDay,
-    #[fail(display = "Invalid hour")]
-    BadHour,
-    #[fail(display = "Invalid minute")]
-    BadMinute,
-    #[fail(display = "Invalid second")]
-    BadSecond,
-    #[fail(display = "Could not find requested route")]
-    NoRoute,
-    #[fail(display = "Could not interact with session")]
-    Session,
-    #[fail(display = "Message from backend canceled")]
-    Canceled,
+    #[fail(display = "Error generating client secret")] Generation,
+    #[fail(display = "Error verifying client secret")] Verification,
+    #[fail(display = "Error generating response body")] Body,
+    #[fail(display = "Error generating response")] Response,
+    #[fail(display = "Missing a required field")] MissingField,
+    #[fail(display = "Invalid timezone")] BadTimeZone,
+    #[fail(display = "Invalid year")] BadYear,
+    #[fail(display = "Invalid month")] BadMonth,
+    #[fail(display = "Invalid day")] BadDay,
+    #[fail(display = "Invalid hour")] BadHour,
+    #[fail(display = "Invalid minute")] BadMinute,
+    #[fail(display = "Invalid second")] BadSecond,
+    #[fail(display = "Could not find requested route")] NoRoute,
+    #[fail(display = "Could not interact with session")] Session,
+    #[fail(display = "Message from backend canceled")] Canceled,
 }
 
 impl From<FrontendErrorKind> for FrontendError {

@@ -17,9 +17,11 @@
 
 extern crate actix;
 extern crate event_web;
+extern crate futures;
 
-use actix::{Actor, Context, Handler, System};
-use event_web::{EditEvent, Event, FrontendError, FrontendErrorKind, LookupEvent, NewEvent};
+use actix::{Actor, Context, Handler, Message, System};
+use event_web::{EditEvent, FrontendErrorKind, LookupEvent, NewEvent, SendFutResponse};
+use futures::IntoFuture;
 
 #[derive(Copy, Clone, Debug)]
 struct MyHandler;
@@ -29,26 +31,33 @@ impl Actor for MyHandler {
 }
 
 impl Handler<NewEvent> for MyHandler {
-    type Result = Result<(), FrontendError>;
+    type Result = SendFutResponse<NewEvent>;
 
     fn handle(&mut self, msg: NewEvent, _: &mut Self::Context) -> Self::Result {
-        Ok(println!("Event: {:?}", msg.0))
+        println!("Event: {:?}", msg.0);
+
+        SendFutResponse::new(Box::new(Ok(()).into_future()) as <NewEvent as Message>::Result)
     }
 }
 
 impl Handler<EditEvent> for MyHandler {
-    type Result = Result<(), FrontendError>;
+    type Result = SendFutResponse<EditEvent>;
 
     fn handle(&mut self, msg: EditEvent, _: &mut Self::Context) -> Self::Result {
-        Ok(println!("Event: {:?}", msg.0))
+        println!("Event: {:?}", msg.0);
+
+        SendFutResponse::new(Box::new(Ok(()).into_future()) as <EditEvent as Message>::Result)
     }
 }
 
 impl Handler<LookupEvent> for MyHandler {
-    type Result = Result<Event, FrontendError>;
+    type Result = SendFutResponse<LookupEvent>;
 
     fn handle(&mut self, _: LookupEvent, _: &mut Self::Context) -> Self::Result {
-        Err(FrontendErrorKind::Canceled.into())
+        SendFutResponse::new(
+            Box::new(Err(FrontendErrorKind::Canceled.into()).into_future())
+                as <LookupEvent as Message>::Result,
+        )
     }
 }
 
