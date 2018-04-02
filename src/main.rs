@@ -17,8 +17,6 @@
  * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#![feature(conservative_impl_trait)]
-
 extern crate actix;
 extern crate base_x;
 extern crate chrono;
@@ -42,6 +40,8 @@ extern crate telebot;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_postgres;
+extern crate tokio_reactor;
+extern crate tokio_timer;
 
 mod actors;
 mod conn;
@@ -90,12 +90,16 @@ fn main() {
 
     let bot = RcBot::new(Arbiter::handle().clone(), &bot_token()).timeout(30);
 
-    let telegram_actor: Addr<Syn, _> =
-        Supervisor::start(move |_| {
-            let db_broker: Addr<Unsync, _> = DbBroker::new(db_url, 5).start();
+    let telegram_actor: Addr<Syn, _> = Supervisor::start(move |_| {
+        let db_broker: Addr<Unsync, _> = DbBroker::new(db_url, 5).start();
 
-            TelegramActor::new(url(), bot, db_broker.clone(), UsersActor::new(db_broker).start())
-        });
+        TelegramActor::new(
+            url(),
+            bot,
+            db_broker.clone(),
+            UsersActor::new(db_broker).start(),
+        )
+    });
 
     telegram_actor.do_send(StartStreaming);
 

@@ -17,12 +17,12 @@
  * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, Running, StreamHandler,
             Syn};
 use futures::{Future, Stream};
-use tokio_core::reactor::Interval;
+use tokio_timer::Interval;
 
 use super::messages::*;
 use super::Timer;
@@ -34,16 +34,14 @@ impl Actor for Timer {
         debug!("Started Timer Actor");
         // Every 30 minutes, check for events happening in the next hour
         ctx.add_stream(
-            Interval::new(Duration::from_secs(30 * 60), &Arbiter::handle())
-                .unwrap()
+            Interval::new(Instant::now(), Duration::from_secs(30 * 60))
                 .map(|_| NextHour)
                 .map_err(|_| Shutdown),
         );
 
         // Every 30 seconds, check if any events have any pending actions
         ctx.add_stream(
-            Interval::new(Duration::from_secs(30), &Arbiter::handle())
-                .unwrap()
+            Interval::new(Instant::now(), Duration::from_secs(30))
                 .map(|_| Migrate)
                 .map_err(|_| MigrateError),
         );
@@ -89,8 +87,7 @@ impl StreamHandler<NextHour, Shutdown> for Timer {
 
     fn finished(&mut self, ctx: &mut Self::Context) {
         ctx.add_stream(
-            Interval::new(Duration::from_secs(60 * 60), &Arbiter::handle())
-                .unwrap()
+            Interval::new(Instant::now(), Duration::from_secs(60 * 60))
                 .map(|_| NextHour)
                 .map_err(|_| Shutdown),
         );
@@ -117,8 +114,7 @@ impl StreamHandler<Migrate, MigrateError> for Timer {
 
     fn finished(&mut self, ctx: &mut Self::Context) {
         ctx.add_stream(
-            Interval::new(Duration::from_secs(30), &Arbiter::handle())
-                .unwrap()
+            Interval::new(Instant::now(), Duration::from_secs(30))
                 .map(|_| Migrate)
                 .map_err(|_| MigrateError),
         );
