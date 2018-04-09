@@ -16,7 +16,6 @@
  */
 
 #![feature(proc_macro)]
-#![feature(conservative_impl_trait)]
 
 extern crate actix;
 extern crate actix_web;
