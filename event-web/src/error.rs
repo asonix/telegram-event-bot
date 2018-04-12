@@ -45,7 +45,7 @@ impl Fail for FrontendError {
 
 impl ResponseError for FrontendError {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::new(StatusCode::BAD_REQUEST, error(self).into_string().into())
+        HttpResponse::BadRequest().body(error(self).into_string())
     }
 }
 

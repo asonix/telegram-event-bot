@@ -30,10 +30,13 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+use std::collections::HashMap;
+
 use actix::{Actor, Addr, Context, Handler, Message, Syn};
 use actix::dev::{MessageResponse, ResponseChannel};
 use actix_web::*;
-use actix_web::httpcodes::{HTTPCreated, HTTPOk};
+use actix_web::http::Method;
+use actix_web::server::HttpServer;
 use chrono::Datelike;
 use chrono::offset::Utc;
 use chrono_tz::Tz;
@@ -188,7 +191,7 @@ fn load_form(
     form_url: String,
     form_title: &str,
     option_event: Option<OptionEvent>,
-) -> Result<HttpResponse, FrontendError> {
+) -> HttpResponse {
     let date = Utc::now().with_timezone(&Tz::US__Central);
 
     let years = (date.year()..date.year() + 4).collect::<Vec<_>>();
@@ -234,8 +237,7 @@ fn load_form(
         .map(|tz| tz.name())
         .collect::<Vec<_>>();
 
-    Ok(HTTPOk
-        .build()
+    HttpResponse::Ok()
         .header(header::CONTENT_TYPE, "text/html")
         .body(
             form(
@@ -252,10 +254,9 @@ fn load_form(
                 form_title,
             ).into_string(),
         )
-        .context(FrontendErrorKind::Body)?)
 }
 
-fn new_form<T>(req: HttpRequest<EventHandler<T>>) -> Result<HttpResponse, FrontendError>
+fn new_form<T>(req: HttpRequest<EventHandler<T>>) -> HttpResponse
 where
     T: Actor<Context = Context<T>>
         + Handler<LookupEvent>
@@ -282,19 +283,15 @@ where
     let id = req.match_info()["secret"].to_owned();
     let submit_url = format!("/events/edit/{}", id);
 
-    Box::new(
-        event_handler
-            .request_event(id.clone())
-            .and_then(move |event| {
-                load_form(
-                    Some(event.into()),
-                    id,
-                    submit_url,
-                    "Event Bot | Edit Event",
-                    None,
-                )
-            }),
-    )
+    Box::new(event_handler.request_event(id.clone()).map(move |event| {
+        load_form(
+            Some(event.into()),
+            id,
+            submit_url,
+            "Event Bot | Edit Event",
+            None,
+        )
+    }))
 }
 
 fn updated<T>(
@@ -312,7 +309,7 @@ where
     let id2 = id.clone();
 
     Box::new(
-        req.urlencoded()
+        req.urlencoded::<HashMap<String, String>>()
             .map_err(|e| e.context(FrontendErrorKind::MissingField).into())
             .and_then(move |mut params| {
                 let option_event = OptionEvent::new(
@@ -334,24 +331,21 @@ where
                 Event::from_option(option_event.clone())
                     .into_future()
                     .and_then(move |event| {
-                        event_handler.edit_event(event.clone(), id).and_then(|_| {
-                            HTTPCreated
-                                .build()
+                        event_handler.edit_event(event.clone(), id).map(|_| {
+                            HttpResponse::Created()
                                 .header(header::CONTENT_TYPE, "text/html")
                                 .body(success(event, "Event Bot | Updated Event").into_string())
-                                .context(FrontendErrorKind::Body)
-                                .map_err(FrontendError::from)
                         })
                     })
                     .or_else(move |_| {
                         let submit_url = format!("/events/edit/{}", id2);
-                        load_form(
+                        Ok(load_form(
                             None,
                             id2,
                             submit_url,
                             "Event Bot | Edit Event",
                             Some(option_event),
-                        )
+                        ))
                     })
             }),
     )
@@ -371,7 +365,7 @@ where
     let id = req.match_info()["secret"].to_owned();
 
     Box::new(
-        req.urlencoded()
+        req.urlencoded::<HashMap<String, String>>()
             .map_err(|e| e.context(FrontendErrorKind::MissingField).into())
             .and_then(move |mut params| {
                 let option_event = OptionEvent::new(
@@ -391,36 +385,30 @@ where
                 );
 
                 Event::from_option(option_event.clone())
-                    .and_then(|event| {
+                    .map(|event| {
                         event_handler
                             .handler
                             .do_send(NewEvent(event.clone(), id.clone()));
 
-                        HTTPCreated
-                            .build()
+                        HttpResponse::Created()
                             .header(header::CONTENT_TYPE, "text/html")
                             .body(success(event, "Event Bot | Created Event").into_string())
-                            .context(FrontendErrorKind::Body)
-                            .map_err(FrontendError::from)
                     })
                     .or_else(move |_| {
                         let submit_url = format!("/events/new/{}", id);
-                        load_form(
+                        Ok(load_form(
                             None,
                             id,
                             submit_url,
                             "Event Bot | New Event",
                             Some(option_event),
-                        )
+                        ))
                     })
             }),
     )
 }
 
-pub fn build<T>(
-    event_handler: EventHandler<T>,
-    prefix: Option<&str>,
-) -> Application<EventHandler<T>>
+pub fn build<T>(event_handler: EventHandler<T>, prefix: Option<&str>) -> App<EventHandler<T>>
 where
     T: Actor<Context = Context<T>>
         + Handler<LookupEvent>
@@ -428,7 +416,7 @@ where
         + Handler<EditEvent>
         + Clone,
 {
-    let app = Application::with_state(event_handler);
+    let app = App::with_state(event_handler);
 
     let app = if let Some(prefix) = prefix {
         app.prefix(prefix)
@@ -443,7 +431,7 @@ where
             r.method(Method::GET).f(edit_form);
             r.method(Method::POST).f(updated);
         })
-        .handler("/assets/", fs::StaticFiles::new("assets/", true))
+        .handler("/assets/", fs::StaticFiles::new("assets/"))
 }
 
 pub fn start<T>(handler: Addr<Syn, T>, addr: &str, prefix: Option<&'static str>)
