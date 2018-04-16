@@ -85,59 +85,23 @@ pub struct OptionEvent {
 }
 
 impl OptionEvent {
-    pub fn new(
-        title: Option<String>,
-        description: Option<String>,
-        start_year: Option<i32>,
-        start_month: Option<u32>,
-        start_day: Option<u32>,
-        start_hour: Option<u32>,
-        start_minute: Option<u32>,
-        end_year: Option<i32>,
-        end_month: Option<u32>,
-        end_day: Option<u32>,
-        end_hour: Option<u32>,
-        end_minute: Option<u32>,
-        timezone: Option<String>,
-    ) -> Self {
-        OptionEvent {
-            title: title.and_then(|title| {
-                if title.trim().len() == 0 {
-                    None
-                } else {
-                    Some(title)
-                }
-            }),
-            description: description.and_then(|description| {
-                if description.trim().len() == 0 {
-                    None
-                } else {
-                    Some(description)
-                }
-            }),
-            start_year: start_year,
-            start_month: start_month,
-            start_day: start_day,
-            start_hour: start_hour,
-            start_minute: start_minute,
-            end_year: end_year,
-            end_month: end_month,
-            end_day: end_day,
-            end_hour: end_hour,
-            end_minute: end_minute,
-            timezone: timezone.and_then(|tz| if tz.trim().len() == 0 { None } else { Some(tz) }),
-        }
-    }
-
     pub fn missing_keys(&self) -> Vec<&'static str> {
         let mut v = Vec::new();
 
         if self.title.is_none() {
             v.push("title");
+        } else if let Some(ref title) = self.title {
+            if title.trim().len() == 0 {
+                v.push("title");
+            }
         }
 
         if self.description.is_none() {
             v.push("description");
+        } else if let Some(ref description) = self.description {
+            if description.trim().len() == 0 {
+                v.push("description");
+            }
         }
 
         if self.start_year.is_none() {
@@ -161,23 +125,23 @@ impl OptionEvent {
         }
 
         if self.end_year.is_none() {
-            v.push("start year");
+            v.push("end year");
         }
 
         if self.end_month.is_none() {
-            v.push("start month");
+            v.push("end month");
         }
 
         if self.end_day.is_none() {
-            v.push("start day");
+            v.push("end day");
         }
 
         if self.end_hour.is_none() {
-            v.push("start hour");
+            v.push("end hour");
         }
 
         if self.end_minute.is_none() {
-            v.push("start minute");
+            v.push("end minute");
         }
 
         if self.timezone.is_none() {

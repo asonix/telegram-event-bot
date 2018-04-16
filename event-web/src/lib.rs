@@ -30,8 +30,6 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-use std::collections::HashMap;
-
 use actix::{Actor, Addr, Context, Handler, Message, Syn};
 use actix::dev::{MessageResponse, ResponseChannel};
 use actix_web::*;
@@ -256,21 +254,15 @@ fn load_form(
         )
 }
 
-fn new_form<T>(req: HttpRequest<EventHandler<T>>) -> HttpResponse
-where
-    T: Actor<Context = Context<T>>
-        + Handler<LookupEvent>
-        + Handler<NewEvent>
-        + Handler<EditEvent>
-        + Clone,
-{
-    let id = req.match_info()["secret"].to_owned();
+fn new_form(secret: Path<String>) -> HttpResponse {
+    let id = secret.into_inner();
     let submit_url = format!("/events/new/{}", id);
     load_form(None, id, submit_url, "Event Bot | New Event", None)
 }
 
 fn edit_form<T>(
-    req: HttpRequest<EventHandler<T>>,
+    path: Path<String>,
+    state: State<EventHandler<T>>,
 ) -> Box<Future<Item = HttpResponse, Error = FrontendError>>
 where
     T: Actor<Context = Context<T>>
@@ -279,8 +271,8 @@ where
         + Handler<EditEvent>
         + Clone,
 {
-    let event_handler = req.state().clone();
-    let id = req.match_info()["secret"].to_owned();
+    let event_handler = (*state).clone();
+    let id = path.into_inner();
     let submit_url = format!("/events/edit/{}", id);
 
     Box::new(event_handler.request_event(id.clone()).map(move |event| {
@@ -295,7 +287,9 @@ where
 }
 
 fn updated<T>(
-    req: HttpRequest<EventHandler<T>>,
+    path: Path<String>,
+    form: Form<OptionEvent>,
+    state: State<EventHandler<T>>,
 ) -> Box<Future<Item = HttpResponse, Error = FrontendError>>
 where
     T: Actor<Context = Context<T>>
@@ -304,55 +298,39 @@ where
         + Handler<EditEvent>
         + Clone,
 {
-    let event_handler = req.state().clone();
-    let id = req.match_info()["secret"].to_owned();
+    let event_handler = (*state).clone();
+    let id = path.into_inner();
     let id2 = id.clone();
 
-    Box::new(
-        req.urlencoded::<HashMap<String, String>>()
-            .map_err(|e| e.context(FrontendErrorKind::MissingField).into())
-            .and_then(move |mut params| {
-                let option_event = OptionEvent::new(
-                    params.remove("title"),
-                    params.remove("description"),
-                    params.remove("start_year").and_then(|y| y.parse().ok()),
-                    params.remove("start_month").and_then(|m| m.parse().ok()),
-                    params.remove("start_day").and_then(|d| d.parse().ok()),
-                    params.remove("start_hour").and_then(|h| h.parse().ok()),
-                    params.remove("start_minute").and_then(|m| m.parse().ok()),
-                    params.remove("end_year").and_then(|y| y.parse().ok()),
-                    params.remove("end_month").and_then(|m| m.parse().ok()),
-                    params.remove("end_day").and_then(|d| d.parse().ok()),
-                    params.remove("end_hour").and_then(|h| h.parse().ok()),
-                    params.remove("end_minute").and_then(|m| m.parse().ok()),
-                    params.remove("timezone"),
-                );
+    let option_event = form.into_inner();
 
-                Event::from_option(option_event.clone())
-                    .into_future()
-                    .and_then(move |event| {
-                        event_handler.edit_event(event.clone(), id).map(|_| {
-                            HttpResponse::Created()
-                                .header(header::CONTENT_TYPE, "text/html")
-                                .body(success(event, "Event Bot | Updated Event").into_string())
-                        })
-                    })
-                    .or_else(move |_| {
-                        let submit_url = format!("/events/edit/{}", id2);
-                        Ok(load_form(
-                            None,
-                            id2,
-                            submit_url,
-                            "Event Bot | Edit Event",
-                            Some(option_event),
-                        ))
-                    })
+    Box::new(
+        Event::from_option(option_event.clone())
+            .into_future()
+            .and_then(move |event| {
+                event_handler.edit_event(event.clone(), id).map(|_| {
+                    HttpResponse::Created()
+                        .header(header::CONTENT_TYPE, "text/html")
+                        .body(success(event, "Event Bot | Updated Event").into_string())
+                })
+            })
+            .or_else(move |_| {
+                let submit_url = format!("/events/edit/{}", id2);
+                Ok(load_form(
+                    None,
+                    id2,
+                    submit_url,
+                    "Event Bot | Edit Event",
+                    Some(option_event),
+                ))
             }),
     )
 }
 
 fn submitted<T>(
-    req: HttpRequest<EventHandler<T>>,
+    path: Path<String>,
+    form: Form<OptionEvent>,
+    state: State<EventHandler<T>>,
 ) -> Box<Future<Item = HttpResponse, Error = FrontendError>>
 where
     T: Actor<Context = Context<T>>
@@ -361,49 +339,31 @@ where
         + Handler<EditEvent>
         + Clone,
 {
-    let event_handler = req.state().clone();
-    let id = req.match_info()["secret"].to_owned();
+    let event_handler = (*state).clone();
+    let id = path.into_inner();
+    let id2 = id.clone();
+
+    let option_event = form.into_inner();
 
     Box::new(
-        req.urlencoded::<HashMap<String, String>>()
-            .map_err(|e| e.context(FrontendErrorKind::MissingField).into())
-            .and_then(move |mut params| {
-                let option_event = OptionEvent::new(
-                    params.remove("title"),
-                    params.remove("description"),
-                    params.remove("start_year").and_then(|y| y.parse().ok()),
-                    params.remove("start_month").and_then(|m| m.parse().ok()),
-                    params.remove("start_day").and_then(|d| d.parse().ok()),
-                    params.remove("start_hour").and_then(|h| h.parse().ok()),
-                    params.remove("start_minute").and_then(|m| m.parse().ok()),
-                    params.remove("end_year").and_then(|y| y.parse().ok()),
-                    params.remove("end_month").and_then(|m| m.parse().ok()),
-                    params.remove("end_day").and_then(|d| d.parse().ok()),
-                    params.remove("end_hour").and_then(|h| h.parse().ok()),
-                    params.remove("end_minute").and_then(|m| m.parse().ok()),
-                    params.remove("timezone"),
-                );
+        Event::from_option(option_event.clone())
+            .into_future()
+            .map(move |event| {
+                event_handler.handler.do_send(NewEvent(event.clone(), id));
 
-                Event::from_option(option_event.clone())
-                    .map(|event| {
-                        event_handler
-                            .handler
-                            .do_send(NewEvent(event.clone(), id.clone()));
-
-                        HttpResponse::Created()
-                            .header(header::CONTENT_TYPE, "text/html")
-                            .body(success(event, "Event Bot | Created Event").into_string())
-                    })
-                    .or_else(move |_| {
-                        let submit_url = format!("/events/new/{}", id);
-                        Ok(load_form(
-                            None,
-                            id,
-                            submit_url,
-                            "Event Bot | New Event",
-                            Some(option_event),
-                        ))
-                    })
+                HttpResponse::Created()
+                    .header(header::CONTENT_TYPE, "text/html")
+                    .body(success(event, "Event Bot | Created Event").into_string())
+            })
+            .or_else(move |_| {
+                let submit_url = format!("/events/new/{}", id2);
+                Ok(load_form(
+                    None,
+                    id2,
+                    submit_url,
+                    "Event Bot | New Event",
+                    Some(option_event),
+                ))
             }),
     )
 }
@@ -425,11 +385,11 @@ where
     };
 
     app.resource("/events/new/{secret}", |r| {
-        r.method(Method::GET).f(new_form);
-        r.method(Method::POST).f(submitted);
+        r.method(Method::GET).with(new_form);
+        r.method(Method::POST).with3(submitted);
     }).resource("/events/edit/{secret}", |r| {
-            r.method(Method::GET).f(edit_form);
-            r.method(Method::POST).f(updated);
+            r.method(Method::GET).with2(edit_form);
+            r.method(Method::POST).with3(updated);
         })
         .handler("/assets/", fs::StaticFiles::new("assets/"))
 }
