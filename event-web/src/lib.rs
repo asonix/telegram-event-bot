@@ -271,11 +271,10 @@ where
         + Handler<EditEvent>
         + Clone,
 {
-    let event_handler = (*state).clone();
     let id = path.into_inner();
     let submit_url = format!("/events/edit/{}", id);
 
-    Box::new(event_handler.request_event(id.clone()).map(move |event| {
+    Box::new(state.request_event(id.clone()).map(move |event| {
         load_form(
             Some(event.into()),
             id,
@@ -298,7 +297,6 @@ where
         + Handler<EditEvent>
         + Clone,
 {
-    let event_handler = (*state).clone();
     let id = path.into_inner();
     let id2 = id.clone();
 
@@ -308,7 +306,7 @@ where
         Event::from_option(option_event.clone())
             .into_future()
             .and_then(move |event| {
-                event_handler.edit_event(event.clone(), id).map(|_| {
+                state.edit_event(event.clone(), id).map(|_| {
                     HttpResponse::Created()
                         .header(header::CONTENT_TYPE, "text/html")
                         .body(success(event, "Event Bot | Updated Event").into_string())
@@ -339,7 +337,6 @@ where
         + Handler<EditEvent>
         + Clone,
 {
-    let event_handler = (*state).clone();
     let id = path.into_inner();
     let id2 = id.clone();
 
@@ -349,7 +346,7 @@ where
         Event::from_option(option_event.clone())
             .into_future()
             .map(move |event| {
-                event_handler.handler.do_send(NewEvent(event.clone(), id));
+                state.handler.do_send(NewEvent(event.clone(), id));
 
                 HttpResponse::Created()
                     .header(header::CONTENT_TYPE, "text/html")
