@@ -58,17 +58,9 @@ pub mod messages;
 /// This type defines all the possible shapes of data coming from a Telegram Callback Query
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum CallbackQueryMessage {
-    NewEvent {
-        channel_id: Integer,
-    },
-    EditEvent {
-        event_id: i32,
-    },
-    DeleteEvent {
-        event_id: i32,
-        system_id: i32,
-        title: String,
-    },
+    NewEvent { channel_id: Integer },
+    EditEvent { event_id: i32 },
+    DeleteEvent { event_id: i32, system_id: i32 },
 }
 
 /// Define the Telegram Actor. It knows the base URL of the Web UI, and can talk to the database,
@@ -609,33 +601,56 @@ impl TelegramActor {
                                 CallbackQueryMessage::DeleteEvent {
                                     event_id,
                                     system_id,
-                                    title,
-                                } => Arbiter::handle().spawn(
-                                    // Spawn a future taht deletes the given event
-                                    self.db
-                                        .send(DeleteEvent { event_id })
-                                        .then(flatten)
-                                        .and_then(move |_| {
-                                            db.send(LookupSystem { system_id }).then(flatten)
-                                        })
-                                        .then(move |chat_system| match chat_system {
-                                            Ok(chat_system) => Ok(TelegramActor::event_deleted(
-                                                &bot,
-                                                chat_id,
-                                                chat_system.events_channel(),
-                                                title,
-                                            )),
-                                            Err(e) => {
+                                } => {
+                                    let db = self.db.clone();
+                                    let bot2 = self.bot.clone();
+
+                                    Arbiter::handle().spawn(
+                                        // Spawn a future taht deletes the given event
+                                        self.db
+                                            .send(LookupEvent { event_id })
+                                            .then(flatten)
+                                            .or_else(move |e| {
                                                 TelegramActor::send_error(
-                                                    &bot,
+                                                    &bot2,
                                                     chat_id,
                                                     "Failed to delete event",
                                                 );
                                                 Err(e)
-                                            }
-                                        })
-                                        .map_err(|e| error!("Error: {:?}", e)),
-                                ),
+                                            })
+                                            .map_err(|e| {
+                                                error!("Error finding event to delete: {:?}", e)
+                                            })
+                                            .and_then(move |event| {
+                                                let title = event.title().to_owned();
+                                                db.send(DeleteEvent { event_id })
+                                                    .then(flatten)
+                                                    .and_then(move |_| {
+                                                        db.send(LookupSystem { system_id })
+                                                            .then(flatten)
+                                                    })
+                                                    .then(move |chat_system| match chat_system {
+                                                        Ok(chat_system) => {
+                                                            Ok(TelegramActor::event_deleted(
+                                                                &bot,
+                                                                chat_id,
+                                                                chat_system.events_channel(),
+                                                                title,
+                                                            ))
+                                                        }
+                                                        Err(e) => {
+                                                            TelegramActor::send_error(
+                                                                &bot,
+                                                                chat_id,
+                                                                "Failed to delete event",
+                                                            );
+                                                            Err(e)
+                                                        }
+                                                    })
+                                                    .map_err(|e| error!("Error: {:?}", e))
+                                            }),
+                                    );
+                                }
                             }
                         }
                     }
@@ -886,7 +901,6 @@ impl TelegramActor {
                     serde_json::to_string(&CallbackQueryMessage::DeleteEvent {
                         event_id: event.id(),
                         system_id: event.system_id(),
-                        title: event.title().to_owned(),
                     }).unwrap(),
                 )
             })
