@@ -376,49 +376,65 @@ impl TelegramActor {
                     debug!("channel");
                     let db = self.db.clone();
                     let bot = self.bot.clone();
+                    let bot2 = bot.clone();
                     let channel_id = message.chat.id;
 
-                    // Get the valid IDs provided in the link message, update the UserActor with
-                    // the valid links
-                    let chat_ids = text.trim_left_matches("/link")
-                        .split(' ')
-                        .into_iter()
-                        .filter_map(|chat_id| chat_id.parse::<Integer>().ok())
-                        .map(|chat_id| {
-                            self.users.do_send(TouchChannel(channel_id, chat_id));
+                    let users = self.users.clone();
 
-                            chat_id
-                        })
-                        .collect();
-
-                    // Spawn a future updating the links between the channel and the given chats in
-                    // the database
                     Arbiter::handle().spawn(
-                        self.is_admin(channel_id, chat_ids)
-                            .then(move |res| match res {
-                                Ok(item) => Ok((item, bot)),
-                                Err(err) => Err((err, bot)),
-                            })
-                            .and_then(move |(chat_ids, bot)| {
-                                for chat_id in chat_ids.iter() {
-                                    db.do_send(NewChat {
-                                        channel_id: channel_id,
-                                        chat_id: *chat_id,
-                                    });
-                                }
-
-                                TelegramActor::linked(&bot, channel_id, chat_ids);
-                                Ok(())
-                            })
-                            .map_err(move |(e, bot)| {
+                        self.db
+                            .send(LookupSystemByChannel(channel_id))
+                            .then(flatten)
+                            .or_else(move |_| {
                                 TelegramActor::send_error(
+                                    &bot,
+                                    channel_id,
+                                    "Please /init the channel before linking",
+                                );
+                                Err(())
+                            })
+                            .and_then(move |_: ChatSystem| {
+                                // Get the valid IDs provided in the link message, update the UserActor with
+                                // the valid links
+                                let chat_ids = text.trim_left_matches("/link")
+                                    .split(' ')
+                                    .into_iter()
+                                    .filter_map(|chat_id| chat_id.parse::<Integer>().ok())
+                                    .map(|chat_id| {
+                                        users.do_send(TouchChannel(channel_id, chat_id));
+
+                                        chat_id
+                                    })
+                                    .collect();
+
+                                // Spawn a future updating the links between the channel and the given chats in
+                                // the database
+                                TelegramActor::is_admin(bot2.clone(), channel_id, chat_ids)
+                                    .then(move |res| match res {
+                                        Ok(item) => Ok((item, bot2)),
+                                        Err(err) => Err((err, bot2)),
+                                    })
+                                    .and_then(move |(chat_ids, bot)| {
+                                        for chat_id in chat_ids.iter() {
+                                            db.do_send(NewChat {
+                                                channel_id: channel_id,
+                                                chat_id: *chat_id,
+                                            });
+                                        }
+
+                                        TelegramActor::linked(&bot, channel_id, chat_ids);
+                                        Ok(())
+                                    })
+                                    .map_err(move |(e, bot)| {
+                                        TelegramActor::send_error(
                                     &bot,
                                     channel_id,
                                     "Could not determine if you are an admin of provided chats",
                                 );
-                                e
-                            })
-                            .map_err(|e| error!("Error checking admin: {:?}", e)),
+                                        e
+                                    })
+                                    .map_err(|e| error!("Error checking admin: {:?}", e))
+                            }),
                     );
                 }
             } else if text.starts_with("/init") {
@@ -924,8 +940,27 @@ impl TelegramActor {
             .collect()
             .and_then(move |buttons| {
                 let msg = if buttons.len() > 0 {
+                    let buttons = buttons.into_iter().fold(
+                        Vec::new(),
+                        |mut acc: Vec<Vec<_>>, button| {
+                            let len = acc.len();
+
+                            if len > 0 {
+                                if acc[len - 1].len() < 2 {
+                                    acc[len - 1].push(button);
+                                } else {
+                                    acc.push(vec![button]);
+                                }
+                            } else {
+                                acc.push(vec![button]);
+                            }
+
+                            acc
+                        },
+                    );
+
                     bot2.message(chat_id, "Which event would you like to edit?".to_owned())
-                        .reply_markup(InlineKeyboardMarkup::new(vec![buttons]))
+                        .reply_markup(InlineKeyboardMarkup::new(buttons))
                 } else {
                     bot2.message(chat_id, "You aren't hosting any events".to_owned())
                 };
@@ -953,12 +988,11 @@ impl TelegramActor {
     }
 
     fn is_admin(
-        &self,
+        bot: RcBot,
         channel_id: Integer,
         chat_ids: Vec<Integer>,
     ) -> impl Future<Item = Vec<Integer>, Error = EventError> {
-        self.bot
-            .unban_chat_administrators(channel_id)
+        bot.unban_chat_administrators(channel_id)
             .send()
             .map_err(|e| EventError::from(e.context(EventErrorKind::TelegramLookup)))
             .and_then(move |(bot, admins)| {
