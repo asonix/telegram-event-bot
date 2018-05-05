@@ -1688,7 +1688,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "telebot"
 version = "0.2.8"
-source = "git+https://github.com/asonix/telebot.git#065d617c6139ea842ad21bcbc4e47ac64e00d885"
+source = "git+https://github.com/asonix/telebot.git#0e340f9ecada78167bdea601aa42a114bdbbd91e"
 dependencies = [
  "erased-serde 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1709,7 +1709,7 @@ dependencies = [
 [[package]]
 name = "telebot-derive"
 version = "0.0.11"
-source = "git+https://github.com/asonix/telebot.git#065d617c6139ea842ad21bcbc4e47ac64e00d885"
+source = "git+https://github.com/asonix/telebot.git#0e340f9ecada78167bdea601aa42a114bdbbd91e"
 dependencies = [
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",

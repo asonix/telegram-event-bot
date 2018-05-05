@@ -36,8 +36,8 @@ use event_web::generate_secret;
 use rand::Rng;
 use rand::os::OsRng;
 use serde_json;
-use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage,
-                         FunctionPinChatMessage};
+use telebot::functions::{FunctionEditMessageText, FunctionGetChat, FunctionGetChatAdministrators,
+                         FunctionMessage, FunctionPinChatMessage};
 
 use ENCODING_ALPHABET;
 use actors::db_broker::messages::{DeleteEvent, DeleteUserByUserId, GetEventsForSystem,
@@ -504,6 +504,7 @@ impl TelegramActor {
 
         if let Some(msg) = callback_query.message {
             let chat_id = msg.chat.id;
+            let message_id = msg.message_id;
 
             if let Some(data) = callback_query.data {
                 if let Ok(query_data) = serde_json::from_str::<CallbackQueryMessage>(&data) {
@@ -554,9 +555,10 @@ impl TelegramActor {
                                                     })
                                             })
                                             .then(move |nel| match nel {
-                                                Ok(nel) => Ok(TelegramActor::send_url(
+                                                Ok(nel) => Ok(TelegramActor::edit_with_url(
                                                     &bot,
                                                     chat_id,
+                                                    message_id,
                                                     "create".to_owned(),
                                                     format!(
                                                         "{}/events/new/{}={}",
@@ -609,9 +611,10 @@ impl TelegramActor {
                                                 }).then(flatten)
                                             })
                                             .then(move |eel| match eel {
-                                                Ok(eel) => Ok(TelegramActor::send_url(
+                                                Ok(eel) => Ok(TelegramActor::edit_with_url(
                                                     &bot,
                                                     chat_id,
+                                                    message_id,
                                                     "update".to_owned(),
                                                     format!(
                                                         "{}/events/edit/{}={}",
@@ -1078,6 +1081,7 @@ impl TelegramActor {
 /link - link a group chat with an event channel (usage: /link [chat_id])
 /id - get the id of a group chat
 /events - get a list of events for the current chat
+/pinevents - pin a list of upcomming events in the current group
 /new - Create a new event (in a private chat with the bot)
 /edit - Edit an event you're hosting (in a private chat with the bot)
 /delete - Delete an event you're hosting (in a private chat with the bot)
@@ -1090,11 +1094,21 @@ impl TelegramActor {
         send_message(bot, chat_id, error.to_owned());
     }
 
-    fn send_url(bot: &RcBot, chat_id: Integer, action: String, url: String) {
-        send_message(
-            bot,
-            chat_id,
-            format!("Use this link to {} your event: {}", action, url),
+    fn edit_with_url(
+        bot: &RcBot,
+        chat_id: Integer,
+        message_id: Integer,
+        action: String,
+        url: String,
+    ) {
+        bot.inner.handle.spawn(
+            bot.edit_message_text(format!("Use this link to {} your event: {}", action, url))
+                .chat_id(chat_id)
+                .message_id(message_id)
+                .reply_markup(InlineKeyboardMarkup::new(vec![vec![]]))
+                .send()
+                .map(|_| ())
+                .map_err(|e| error!("Error sending message to Telegram: {:?}", e)),
         );
     }
 
