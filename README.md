@@ -30,6 +30,7 @@ Available commands:
 /link - link a group chat with an event channel (usage: /link [chat_id])
 /id - get the id of a group chat
 /events - get a list of events for the current chat
+/pinevents - pin a list of upcomming events in the current group
 /new - Create a new event (in a private chat with the bot)
 /edit - Edit an event you're hosting (in a private chat with the bot)
 /delete - Delete an event you're hosting (in a private chat with the bot)
