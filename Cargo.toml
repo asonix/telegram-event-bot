@@ -3,7 +3,7 @@ name = "event-bot"
 description = "A bot for Telegram to manage time-based events"
 version = "0.1.0"
 license = "GPL-3.0"
-authors = ["Riley Trautman <asonix.dev@gmail.com>"]
+authors = ["asonix <asonix.dev@gmail.com>"]
 repository = "https://github.com/asonix/telegram-event-bot"
 readme = "README.md"
 keywords = ["telegram", "events", "bot"]
@@ -25,7 +25,7 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 time = "0.1"
-telebot = "^0.2.8"
+telebot = { version = "^0.2.8", git = "https://github.com/asonix/telebot.git" }
 tokio-core = "0.1"
 tokio-reactor = "0.1"
 tokio-timer = "0.2"

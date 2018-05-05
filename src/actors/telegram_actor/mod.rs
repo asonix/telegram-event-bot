@@ -36,7 +36,8 @@ use event_web::generate_secret;
 use rand::Rng;
 use rand::os::OsRng;
 use serde_json;
-use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage};
+use telebot::functions::{FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage,
+                         FunctionPinChatMessage};
 
 use ENCODING_ALPHABET;
 use actors::db_broker::messages::{DeleteEvent, DeleteUserByUserId, GetEventsForSystem,
@@ -299,6 +300,39 @@ impl TelegramActor {
                                     Ok(events) => {
                                         Ok(TelegramActor::send_events(&bot, chat_id, events))
                                     }
+                                    Err(e) => {
+                                        TelegramActor::send_error(
+                                            &bot,
+                                            chat_id,
+                                            "Failed to fetch events",
+                                        );
+                                        Err(e)
+                                    }
+                                })
+                                .map_err(|e| error!("Error looking up events: {:?}", e)),
+                        )
+                    } else {
+                        TelegramActor::send_error(&self.bot, chat_id, "Could not fetch events");
+                    }
+                } else if text.starts_with("/pinevents") {
+                    debug!("events");
+                    let chat_id = message.chat.id;
+
+                    if message.chat.kind == "group" || message.chat.kind == "supergroup" {
+                        debug!("group | supergroup");
+                        let bot = self.bot.clone();
+
+                        // Spawn a future that handles printing the events for a given chat
+                        Arbiter::handle().spawn(
+                            self.db
+                                .send(LookupEventsByChatId { chat_id })
+                                .then(flatten)
+                                .then(move |events| match events {
+                                    Ok(events) => Ok(TelegramActor::send_and_pin_events(
+                                        &bot,
+                                        chat_id,
+                                        events,
+                                    )),
                                     Err(e) => {
                                         TelegramActor::send_error(
                                             &bot,
@@ -820,7 +854,7 @@ impl TelegramActor {
                             .filter(|event| event.id() != event_id)
                             .collect();
 
-                        print_events(&bot, chat_system.events_channel(), events)
+                        print_events(&bot, chat_system.events_channel(), events).map(|_| ())
                     })
             });
 
@@ -1067,7 +1101,24 @@ impl TelegramActor {
     fn send_events(bot: &RcBot, chat_id: Integer, events: Vec<Event>) {
         bot.inner.handle.spawn(
             print_events(bot, chat_id, events)
+                .map(|_| ())
                 .map_err(|e| error!("Error sending events to Telegram: {:?}", e)),
+        );
+    }
+
+    fn send_and_pin_events(bot: &RcBot, chat_id: Integer, events: Vec<Event>) {
+        bot.inner.handle.spawn(
+            print_events(bot, chat_id, events)
+                .map_err(|e| error!("Error sending events to Telegram: {:?}", e))
+                .and_then(move |(bot, message)| {
+                    let message_id = message.message_id;
+                    let chat_id = message.chat.id;
+
+                    bot.pin_chat_message(chat_id, message_id)
+                        .send()
+                        .map(|_| ())
+                        .map_err(|e| error!("Error pinning message: {:?}", e))
+                }),
         );
     }
 
@@ -1125,7 +1176,7 @@ fn print_events(
     bot: &RcBot,
     chat_id: Integer,
     events: Vec<Event>,
-) -> impl Future<Item = (), Error = EventError> {
+) -> impl Future<Item = (RcBot, Message), Error = EventError> {
     let events = events
         .into_iter()
         .map(|event| {
@@ -1159,7 +1210,6 @@ fn print_events(
 
     bot.message(chat_id, msg)
         .send()
-        .map(|_| ())
         .map_err(|e| e.context(EventErrorKind::Telegram).into())
 }
 
