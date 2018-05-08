@@ -24,15 +24,15 @@
 use std::collections::HashMap;
 
 use actix::{Addr, Arbiter, Syn, Unsync};
-use chrono::{DateTime, Duration as OldDuration, Timelike};
 use chrono::offset::Utc;
+use chrono::{DateTime, Duration as OldDuration, Timelike};
 use chrono_tz::Tz;
 use futures::Future;
 
-use actors::db_broker::DbBroker;
 use actors::db_broker::messages::{DeleteEvent, GetEventsInRange};
-use actors::telegram_actor::TelegramActor;
+use actors::db_broker::DbBroker;
 use actors::telegram_actor::messages::{EventOver, EventSoon, EventStarted};
+use actors::telegram_actor::TelegramActor;
 use error::EventError;
 use models::event::Event;
 use util::flatten;

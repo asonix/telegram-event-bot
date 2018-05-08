@@ -17,8 +17,8 @@
 
 use std::str::FromStr;
 
-use chrono::{DateTime, Datelike, Timelike};
 use chrono::offset::Utc;
+use chrono::{DateTime, Datelike, Timelike};
 use chrono_tz::Tz;
 use failure::{Fail, ResultExt};
 

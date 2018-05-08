@@ -16,6 +16,7 @@
  */
 
 #![feature(proc_macro)]
+#![feature(proc_macro_non_items)]
 
 extern crate actix;
 extern crate actix_web;
@@ -30,17 +31,17 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-use actix::{Actor, Addr, Context, Handler, Message, Syn};
 use actix::dev::{MessageResponse, ResponseChannel};
-use actix_web::*;
+use actix::{Actor, Addr, Context, Handler, Message, Syn};
 use actix_web::http::Method;
 use actix_web::server::HttpServer;
-use chrono::Datelike;
+use actix_web::*;
 use chrono::offset::Utc;
+use chrono::Datelike;
 use chrono_tz::Tz;
 use failure::{Fail, ResultExt};
-use futures::{Future, IntoFuture};
 use futures::future::Either;
+use futures::{Future, IntoFuture};
 use http::header;
 
 mod error;

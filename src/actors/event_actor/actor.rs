@@ -17,13 +17,14 @@
  * along with Telegram Event Bot.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use actix::{Actor, AsyncContext, Context, Handler, Message};
 use actix::fut::wrap_future;
-use event_web::{EditEvent, FrontendError, FrontendErrorKind, LookupEvent, NewEvent,
-                SendFutResponse};
+use actix::{Actor, AsyncContext, Context, Handler, Message};
+use event_web::{
+    EditEvent, FrontendError, FrontendErrorKind, LookupEvent, NewEvent, SendFutResponse,
+};
 use failure::Fail;
-use futures::Future;
 use futures::sync::oneshot;
+use futures::Future;
 
 use super::EventActor;
 

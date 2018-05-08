@@ -19,18 +19,20 @@
 
 //! This module defines the EventActor. This actor handles callbacks from the web UI
 use actix::{Addr, Syn, Unsync};
-use event_web::{Event as FrontendEvent, FrontendError, FrontendErrorKind};
 use event_web::verify_secret;
+use event_web::{Event as FrontendEvent, FrontendError, FrontendErrorKind};
 use failure::Fail;
 use futures::{Future, IntoFuture};
 
+use actors::db_broker::messages::{
+    DeleteEditEventLink, DeleteEventLink, EditEvent, LookupEditEventLink, LookupEvent,
+    LookupEventLink, NewEvent,
+};
 use actors::db_broker::DbBroker;
-use actors::db_broker::messages::{DeleteEditEventLink, DeleteEventLink, EditEvent,
-                                  LookupEditEventLink, LookupEvent, LookupEventLink, NewEvent};
-use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::{NewEvent as TgNewEvent, UpdateEvent as TgUpdateEvent};
-use actors::timer::Timer;
+use actors::telegram_actor::TelegramActor;
 use actors::timer::messages::{Events, UpdateEvent};
+use actors::timer::Timer;
 use error::{EventError, EventErrorKind};
 use util::flatten;
 

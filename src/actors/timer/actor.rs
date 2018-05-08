@@ -19,8 +19,9 @@
 
 use std::time::{Duration, Instant};
 
-use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, Running, StreamHandler,
-            Syn};
+use actix::{
+    Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, Running, StreamHandler, Syn,
+};
 use futures::{Future, Stream};
 use tokio_timer::Interval;
 

@@ -24,18 +24,20 @@
 //! handle incoming events like Telegram Updates, or a failed Telegram Update Stream. Other actors
 //! send this actor messages as a proxy to talk to Telegram.
 
-use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, Running, StreamHandler,
-            Supervised, Unsync};
-use futures::{Future, IntoFuture, Stream};
+use actix::{
+    Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, Running, StreamHandler,
+    Supervised, Unsync,
+};
 use futures::future::Either;
 use futures::stream::{iter_ok, repeat};
+use futures::{Future, IntoFuture, Stream};
 use telebot::functions::*;
 use telebot::objects::Update;
 use telebot::RcBot;
 
-use error::{EventError, EventErrorKind};
 use super::messages::*;
 use super::TelegramActor;
+use error::{EventError, EventErrorKind};
 
 impl Actor for TelegramActor {
     type Context = Context<Self>;

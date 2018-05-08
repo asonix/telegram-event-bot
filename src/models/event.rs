@@ -19,20 +19,20 @@
 
 use std::hash::{Hash, Hasher};
 
-use chrono::DateTime;
 use chrono::offset::Utc;
+use chrono::DateTime;
 use chrono_tz::Tz;
 use failure::ResultExt;
 use futures::{Future, IntoFuture};
 use futures_state_stream::StateStream;
 use telebot::objects::Integer;
-use tokio_postgres::Connection;
 use tokio_postgres::stmt::Statement;
 use tokio_postgres::transaction::Transaction;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::Connection;
 
-use error::{EventError, EventErrorKind};
 use super::user::User;
+use error::{EventError, EventErrorKind};
 use util::*;
 
 /// Event represents a scheduled Event

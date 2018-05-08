@@ -27,8 +27,8 @@ use futures_state_stream::StateStream;
 use telebot::objects::Integer;
 use tokio_postgres::Connection;
 
-use error::{EventError, EventErrorKind};
 use super::chat::Chat;
+use error::{EventError, EventErrorKind};
 use util::*;
 
 /// ChatSystem represents a series of linked chats

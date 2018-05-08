@@ -22,17 +22,17 @@
 use std::collections::HashSet;
 
 use actix::{Actor, AsyncContext, Context, Handler, Message, Running, StreamHandler};
-use futures::{Future, Stream};
 use futures::stream::iter_ok;
+use futures::{Future, Stream};
 use telebot::objects::Integer;
 
-use error::EventError;
+use super::messages::*;
+use super::{DeleteState, UsersActor};
 use actors::db_broker::messages::{GetSystemsWithChats, GetUsersWithChats};
-use models::user::User;
+use error::EventError;
 use models::chat::Chat;
 use models::chat_system::ChatSystem;
-use super::{DeleteState, UsersActor};
-use super::messages::*;
+use models::user::User;
 use util::flatten;
 
 impl Actor for UsersActor {

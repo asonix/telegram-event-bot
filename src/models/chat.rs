@@ -24,8 +24,8 @@ use futures_state_stream::StateStream;
 use telebot::objects::Integer;
 use tokio_postgres::Connection;
 
-use error::{EventError, EventErrorKind};
 use super::chat_system::ChatSystem;
+use error::{EventError, EventErrorKind};
 use util::*;
 
 /// Chat represents a single telegram chat

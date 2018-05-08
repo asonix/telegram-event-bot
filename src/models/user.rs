@@ -22,11 +22,11 @@
 use futures::Future;
 use futures_state_stream::StateStream;
 use telebot::objects::Integer;
-use tokio_postgres::Connection;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::Connection;
 
-use error::{EventError, EventErrorKind};
 use super::chat::Chat;
+use error::{EventError, EventErrorKind};
 use util::*;
 
 /// User represents a user that belongs to at least one chat in a system

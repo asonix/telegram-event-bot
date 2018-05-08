@@ -19,11 +19,13 @@
 
 //! This module defines all the Handler and Actor traits for the `DbBroker` type.
 
-use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, ResponseActFuture, Unsync};
 use actix::fut::wrap_future;
+use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, ResponseActFuture, Unsync};
 use futures::Future;
 use tokio_postgres::Connection;
 
+use super::messages::*;
+use super::DbBroker;
 use conn::connect_to_database;
 use error::EventError;
 use models::chat::Chat;
@@ -32,8 +34,6 @@ use models::edit_event_link::EditEventLink;
 use models::event::Event;
 use models::new_event_link::NewEventLink;
 use models::user::User;
-use super::DbBroker;
-use super::messages::*;
 
 type FutureResponse<I> = ResponseActFuture<DbBroker, I, EventError>;
 

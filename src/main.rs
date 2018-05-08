@@ -50,14 +50,14 @@ mod models;
 mod util;
 
 use actix::{Actor, Addr, Arbiter, Supervisor, Syn, System, Unsync};
-use dotenv::dotenv;
 use actors::db_broker::DbBroker;
 use actors::event_actor::EventActor;
-use actors::telegram_actor::TelegramActor;
 use actors::telegram_actor::messages::StartStreaming;
+use actors::telegram_actor::TelegramActor;
 use actors::timer::Timer;
 use actors::users_actor::UsersActor;
 use conn::prepare_database_connection;
+use dotenv::dotenv;
 use telebot::RcBot;
 
 use std::env;

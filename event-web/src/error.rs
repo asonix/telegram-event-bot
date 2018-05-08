@@ -17,10 +17,10 @@
 
 use std::fmt;
 
-use actix_web::*;
 use actix_web::error::ResponseError;
-use views::error;
+use actix_web::*;
 use failure::{Backtrace, Context, Fail};
+use views::error;
 
 #[derive(Debug)]
 pub struct FrontendError {

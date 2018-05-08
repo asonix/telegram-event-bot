@@ -24,8 +24,8 @@ use std::collections::HashSet;
 use actix::Message;
 use telebot::objects::Integer;
 
-use error::EventError;
 use super::{DeleteState, UserState};
+use error::EventError;
 
 /// This type is for ensuring a releationship between a user and a chat
 #[derive(Clone, Debug, Eq, PartialEq)]

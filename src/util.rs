@@ -25,8 +25,8 @@
 
 use actix::MailboxError;
 use failure::Fail;
-use tokio_postgres::{Connection, Error as TpError};
 use tokio_postgres::transaction::Transaction;
+use tokio_postgres::{Connection, Error as TpError};
 
 use error::{EventError, EventErrorKind};
 

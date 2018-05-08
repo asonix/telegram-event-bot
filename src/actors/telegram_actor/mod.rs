@@ -20,38 +20,41 @@
 //! This module defines the `TelegramActor` struct and related functions. It handles talking to
 //! Telegram.
 
-use std::fmt::Debug;
 use std::collections::HashSet;
+use std::fmt::Debug;
 
 use actix::{Addr, Arbiter, Syn, Unsync};
+use base_x::encode;
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
 use chrono_tz::US::Central;
-use futures::{Future, Stream};
-use futures::stream::iter_ok;
-use telebot::objects::{CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Integer,
-                       Message, Update};
-use telebot::RcBot;
-use base_x::encode;
 use event_web::generate_secret;
-use rand::Rng;
+use futures::stream::iter_ok;
+use futures::{Future, Stream};
 use rand::os::OsRng;
+use rand::Rng;
 use serde_json;
-use telebot::functions::{FunctionEditMessageText, FunctionGetChat, FunctionGetChatAdministrators,
-                         FunctionMessage, FunctionPinChatMessage};
+use telebot::functions::{
+    FunctionEditMessageText, FunctionGetChat, FunctionGetChatAdministrators, FunctionMessage,
+    FunctionPinChatMessage,
+};
+use telebot::objects::{
+    CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Integer, Message, Update,
+};
+use telebot::RcBot;
 
-use ENCODING_ALPHABET;
-use actors::db_broker::messages::{DeleteEvent, DeleteUserByUserId, GetEventsForSystem,
-                                  LookupEvent, LookupEventsByChatId, LookupEventsByUserId,
-                                  LookupSystem, LookupSystemByChannel, LookupUser, NewChannel,
-                                  NewChat, NewRelation, NewUser, RemoveUserChat,
-                                  StoreEditEventLink, StoreEventLink};
+use actors::db_broker::messages::{
+    DeleteEvent, DeleteUserByUserId, GetEventsForSystem, LookupEvent, LookupEventsByChatId,
+    LookupEventsByUserId, LookupSystem, LookupSystemByChannel, LookupUser, NewChannel, NewChat,
+    NewRelation, NewUser, RemoveUserChat, StoreEditEventLink, StoreEventLink,
+};
 use actors::db_broker::DbBroker;
-use actors::users_actor::{DeleteState, UserState, UsersActor};
 use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
+use actors::users_actor::{DeleteState, UserState, UsersActor};
 use error::{EventError, EventErrorKind};
 use models::chat_system::ChatSystem;
 use models::event::Event;
 use util::flatten;
+use ENCODING_ALPHABET;
 
 mod actor;
 pub mod messages;
@@ -329,9 +332,7 @@ impl TelegramActor {
                                 .then(flatten)
                                 .then(move |events| match events {
                                     Ok(events) => Ok(TelegramActor::send_and_pin_events(
-                                        &bot,
-                                        chat_id,
-                                        events,
+                                        &bot, chat_id, events,
                                     )),
                                     Err(e) => {
                                         TelegramActor::send_error(
