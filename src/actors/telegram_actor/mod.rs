@@ -108,8 +108,8 @@ impl TelegramActor {
         debug!("handle message");
         if let Some(user) = message.left_chat_member {
             debug!("left chat member");
-            if message.chat.kind == "group" || message.chat.kind == "supergroup" {
-                debug!("group | supergroup");
+            if message.chat.kind == "supergroup" {
+                debug!("supergroup");
                 let chat_id = message.chat.id;
                 let user_id = user.id;
 
@@ -141,8 +141,8 @@ impl TelegramActor {
             }
         } else if let Some(user) = message.new_chat_member {
             debug!("new chat member");
-            if message.chat.kind == "group" || message.chat.kind == "supergroup" {
-                debug!("group | supergroup");
+            if message.chat.kind == "supergroup" {
+                debug!("supergroup");
                 let db = self.db.clone();
 
                 let user_id = user.id;
@@ -278,20 +278,30 @@ impl TelegramActor {
                     debug!("id");
                     let chat_id = message.chat.id;
 
-                    if message.chat.kind == "group" || message.chat.kind == "supergroup" {
-                        debug!("group | supergroup");
+                    if message.chat.kind == "supergroup" {
+                        debug!("supergroup");
 
                         // Print the ID of the given chat
                         TelegramActor::print_id(&self.bot, chat_id);
+                    } else if message.chat.kind == "group" {
+                        TelegramActor::send_error(
+                            &self.bot,
+                            chat_id,
+                            "Please upgrade this group to a supergroup before linking",
+                        );
                     } else {
-                        TelegramActor::send_error(&self.bot, chat_id, "Cannot link non-group chat");
+                        TelegramActor::send_error(
+                            &self.bot,
+                            chat_id,
+                            "Cannot link non-supergroup chat",
+                        );
                     }
                 } else if text.starts_with("/events") {
                     debug!("events");
                     let chat_id = message.chat.id;
 
-                    if message.chat.kind == "group" || message.chat.kind == "supergroup" {
-                        debug!("group | supergroup");
+                    if message.chat.kind == "supergroup" {
+                        debug!("supergroup");
                         let bot = self.bot.clone();
 
                         // Spawn a future that handles printing the events for a given chat
@@ -315,14 +325,18 @@ impl TelegramActor {
                                 .map_err(|e| error!("Error looking up events: {:?}", e)),
                         )
                     } else {
-                        TelegramActor::send_error(&self.bot, chat_id, "Could not fetch events");
+                        TelegramActor::send_error(
+                            &self.bot,
+                            chat_id,
+                            "Can only fetch events in a supergroup",
+                        );
                     }
                 } else if text.starts_with("/pinevents") {
-                    debug!("events");
+                    debug!("pinevents");
                     let chat_id = message.chat.id;
 
-                    if message.chat.kind == "group" || message.chat.kind == "supergroup" {
-                        debug!("group | supergroup");
+                    if message.chat.kind == "supergroup" {
+                        debug!("supergroup");
                         let bot = self.bot.clone();
 
                         // Spawn a future that handles printing the events for a given chat
@@ -346,7 +360,11 @@ impl TelegramActor {
                                 .map_err(|e| error!("Error looking up events: {:?}", e)),
                         )
                     } else {
-                        TelegramActor::send_error(&self.bot, chat_id, "Could not fetch events");
+                        TelegramActor::send_error(
+                            &self.bot,
+                            chat_id,
+                            "Can only pin events in a supergroup",
+                        );
                     }
                 } else if text.starts_with("/help")
                     || (text.starts_with("/start") && message.chat.kind == "private")
@@ -355,8 +373,8 @@ impl TelegramActor {
                     self.send_help(message.chat.id);
                 } else {
                     debug!("else");
-                    if message.chat.kind == "group" || message.chat.kind == "supergroup" {
-                        debug!("group | supergroup");
+                    if message.chat.kind == "supergroup" {
+                        debug!("supergroup");
                         let db = self.db.clone();
 
                         let user_id = user.id;
@@ -399,12 +417,13 @@ impl TelegramActor {
             debug!("text");
             if text.starts_with("/link") {
                 debug!("link");
+                let channel_id = message.chat.id;
+
                 if message.chat.kind == "channel" {
                     debug!("channel");
                     let db = self.db.clone();
                     let bot = self.bot.clone();
                     let bot2 = bot.clone();
-                    let channel_id = message.chat.id;
 
                     let users = self.users.clone();
 
@@ -463,12 +482,19 @@ impl TelegramActor {
                                     .map_err(|e| error!("Error checking admin: {:?}", e))
                             }),
                     );
+                } else {
+                    TelegramActor::send_error(
+                        &self.bot,
+                        channel_id,
+                        "The /link command can only be used in channels",
+                    );
                 }
             } else if text.starts_with("/init") {
                 debug!("init");
+                let channel_id = message.chat.id;
+
                 if message.chat.kind == "channel" {
                     debug!("channel");
-                    let channel_id = message.chat.id;
                     let bot = self.bot.clone();
 
                     // Spawn a future that adds the given channel to the database
@@ -492,6 +518,12 @@ impl TelegramActor {
                                 e
                             })
                             .map_err(|e| error!("Error creating channel: {:?}", e)),
+                    );
+                } else {
+                    TelegramActor::send_error(
+                        &self.bot,
+                        channel_id,
+                        "The /init command can only be used in channels",
                     );
                 }
             }
@@ -1079,15 +1111,30 @@ impl TelegramActor {
         send_message(
             &self.bot,
             chat_id,
-            "/init - Initialize an event channel
-/link - link a group chat with an event channel (usage: /link [chat_id])
-/id - get the id of a group chat
+            "Event Bot is a telegram bot to help groups manage events.
+
+In group chats, the following commands are available:
 /events - get a list of events for the current chat
 /pinevents - pin a list of upcomming events in the current group
-/new - Create a new event (in a private chat with the bot)
-/edit - Edit an event you're hosting (in a private chat with the bot)
-/delete - Delete an event you're hosting (in a private chat with the bot)
-/help - Print this help message"
+
+In private chats, the following commands are available:
+/new - Create a new event
+/edit - Edit an event you're hosting
+/delete - Delete an event you're hosting
+/help - Print this help message
+            
+If you're an admin wanting to add this bot to a chat, the following commands will be interesting to you:
+/init - Initialize an event channel
+/link - in an event channel, link a group chat (usage: /link [chat_id])
+/id - get the id of a group chat
+
+Keep in mind that this bot only works in supergroups, not regular groups.
+
+If you have any questions or need help setting up or using the bot, contact @asonix
+
+This bot is released under the GNU General Public License version 3 or later. If you would like a copy of the code, check here:
+http://github.com/asonix/telegram-event-bot
+"
                 .to_owned(),
         );
     }

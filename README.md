@@ -17,6 +17,8 @@ You can talk to this bot on Telegram to get it added to your chats. The bot can 
 4. Get the ID of your chat. You can do this by issuing the `/id` command in the chat.
 5. In your channel, issue the command `/link id` where `id` is the chat Id you got from the previous step. This tells the bot that users in your chat are allowed to create events for this channel.
 
+Things to note: This bot only works in supergroups, not regular groups. Please upgrade your group to a supergroup before using this bot.
+
 #### If you are in a chat that uses this bot, you can use the following steps to create an event
 
 1. Send a message in the group chat (if you haven't already). The event bot uses messages to determine who is present in a chat, since Telegram doesn't offer an API that exposes this information.
@@ -24,17 +26,26 @@ You can talk to this bot on Telegram to get it added to your chats. The bot can 
 3. Select the channel you want to create an event for, the bot will generate a one-time-use link to a web form that will allow you to create an event.
 4. Use the link to create the event.
 
-Available commands:
+##### Available commands:
+
+*For admins*:
 ```
 /init - Initialize an event channel
 /link - link a group chat with an event channel (usage: /link [chat_id])
 /id - get the id of a group chat
+```
+
+*For users*:
+```
+In group chats:
 /events - get a list of events for the current chat
 /pinevents - pin a list of upcomming events in the current group
-/new - Create a new event (in a private chat with the bot)
-/edit - Edit an event you're hosting (in a private chat with the bot)
-/delete - Delete an event you're hosting (in a private chat with the bot)
-/help - Print this help message
+
+In private chats:
+/new - Create a new event
+/edit - Edit an event you're hosting
+/delete - Delete an event you're hosting
+/help - Print the help message
 ```
 
 ### Development

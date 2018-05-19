@@ -10,7 +10,7 @@ keywords = ["telegram", "events", "bot"]
 
 [dependencies]
 actix = "0.5"
-actix-web = "0.5"
+actix-web = "0.6"
 bcrypt = "0.2"
 chrono = "0.4"
 chrono-tz = "0.4"
