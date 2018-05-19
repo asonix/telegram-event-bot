@@ -28,7 +28,7 @@ use base_x::encode;
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Weekday};
 use chrono_tz::US::Central;
 use event_web::generate_secret;
-use futures::stream::iter_ok;
+use futures::stream::{futures_unordered, iter_ok};
 use futures::{Future, Stream};
 use rand::os::OsRng;
 use rand::Rng;
@@ -872,25 +872,26 @@ impl TelegramActor {
         let bot2 = bot.clone();
         let bot3 = bot.clone();
 
-        let fut = iter_ok(channels)
-            .and_then(move |channel_id| {
-                bot.clone()
-                    .get_chat(channel_id)
-                    .send()
-                    .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
-            })
-            .map(move |(_, channel)| {
-                debug!("Asking about channel_id: {}", channel.id);
-                InlineKeyboardButton::new(
-                    channel
-                        .title
-                        .unwrap_or(channel.username.unwrap_or("No title".to_owned())),
-                ).callback_data(
-                    serde_json::to_string(&CallbackQueryMessage::NewEvent {
-                        channel_id: channel.id,
-                    }).unwrap(),
-                )
-            })
+        let fut_iter = channels.into_iter().map(move |channel_id| {
+            bot.clone()
+                .get_chat(channel_id)
+                .send()
+                .map_err(|e| e.context(EventErrorKind::TelegramLookup).into())
+                .map(move |(_, channel)| {
+                    debug!("Asking about channel_id: {}", channel.id);
+                    InlineKeyboardButton::new(
+                        channel
+                            .title
+                            .unwrap_or(channel.username.unwrap_or("No title".to_owned())),
+                    ).callback_data(
+                        serde_json::to_string(&CallbackQueryMessage::NewEvent {
+                            channel_id: channel.id,
+                        }).unwrap(),
+                    )
+                })
+        });
+
+        let fut = futures_unordered(fut_iter)
             .collect()
             .and_then(move |buttons| {
                 let msg = if buttons.len() > 0 {
