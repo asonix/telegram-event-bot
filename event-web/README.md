@@ -2,7 +2,7 @@
 
 Event Web provides the web interaction for the Telegram Event Bot project.
 
-See the parent repository's readme for an overview of this project.
+See the [parent repository's readme](https://github.com/asonix/telegram-event-bot) for an overview of this project.
 
 ### Contributing
 Feel free to open issues for anything you find an issue with. Please note that any contributed code will be licensed under the AGPLv3.
