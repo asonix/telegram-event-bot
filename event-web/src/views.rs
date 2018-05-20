@@ -39,6 +39,7 @@ pub fn form(
         html {
             head {
                 title (heading_text);
+                meta charset="utf-8";
                 link href="/assets/styles.css" rel="stylesheet" type="text/css";
             }
             body {
@@ -284,9 +285,8 @@ pub fn success(event: Event, title: &str) -> Markup {
         (DOCTYPE)
         html {
             head {
-                title {
-                    (title)
-                }
+                meta charset="utf-8";
+                title (title);
                 link href="/assets/styles.css" rel="stylesheet" type="text/css";
             }
             body {
@@ -319,9 +319,8 @@ pub fn error(error: &FrontendError) -> Markup {
         (DOCTYPE)
         html {
             head {
-                title {
-                    "Event Bot | Error"
-                }
+                meta charset="utf-8";
+                title "Event Bot | Error";
                 link href="/assets/styles.css" rel="stylesheet" type="text/css";
             }
             body {
