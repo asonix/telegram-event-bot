@@ -123,6 +123,53 @@ impl ChatSystem {
             })
     }
 
+    pub fn by_id_with_chat_ids(
+        id: i32,
+        connection: Connection,
+    ) -> impl Future<Item = ((ChatSystem, Vec<Integer>), Connection), Error = (EventError, Connection)>
+    {
+        let sql = "SELECT sys.id, sys.events_channel, ch.chat_id
+                    FROM chat_systems AS sys
+                    INNER JOIN chats AS ch ON ch.system_id = sys.id
+                    WHERE sys.id = $1";
+        debug!("{}", sql);
+
+        connection
+            .prepare(sql)
+            .map_err(prepare_error)
+            .and_then(move |(s, connection)| {
+                connection
+                    .query(&s, &[&id])
+                    .map(|row| {
+                        let sys = ChatSystem {
+                            id: row.get(0),
+                            events_channel: row.get(1),
+                        };
+
+                        let chat_id = row.get(2);
+
+                        (sys, chat_id)
+                    })
+                    .collect()
+                    .map_err(lookup_error)
+                    .and_then(|(results, connection)| {
+                        let (sys, chats) = results.into_iter().fold(
+                            (None, Vec::new()),
+                            |(_, mut chats), (sys, chat_id)| {
+                                chats.push(chat_id);
+                                (Some(sys), chats)
+                            },
+                        );
+
+                        if let Some(sys) = sys {
+                            Ok(((sys, chats), connection))
+                        } else {
+                            Err((EventErrorKind::Lookup.into(), connection))
+                        }
+                    })
+            })
+    }
+
     /// Delete a `ChatSystem` and all associated `Chats`, `Events`, and `Users` given an id
     pub fn delete_by_id(
         id: i32,

@@ -44,8 +44,8 @@ use telebot::RcBot;
 
 use actors::db_broker::messages::{
     DeleteEvent, DeleteUserByUserId, GetEventsForSystem, LookupEvent, LookupEventsByChatId,
-    LookupEventsByUserId, LookupSystem, LookupSystemByChannel, LookupUser, NewChannel, NewChat,
-    NewRelation, NewUser, RemoveUserChat, StoreEditEventLink, StoreEventLink,
+    LookupEventsByUserId, LookupSystem, LookupSystemByChannel, LookupSystemWithChats, LookupUser,
+    NewChannel, NewChat, NewRelation, NewUser, RemoveUserChat, StoreEditEventLink, StoreEventLink,
 };
 use actors::db_broker::DbBroker;
 use actors::users_actor::messages::{LookupChannels, RemoveRelation, TouchChannel, TouchUser};
@@ -733,11 +733,22 @@ impl TelegramActor {
         let bot = self.bot.clone();
 
         let fut = self.db
-            .send(LookupSystem {
+            .send(LookupSystemWithChats {
                 system_id: event.system_id(),
             })
             .then(flatten)
-            .and_then(move |chat_system| {
+            .and_then(move |(chat_system, chats)| {
+                for chat in chats {
+                    bot.inner.handle.spawn(
+                        bot.message(
+                            chat,
+                            format!("Don't forget! {} is starting soon!", event.title()),
+                        ).send()
+                            .map(|_| ())
+                            .map_err(|e| error!("Error: {:?}", e)),
+                    );
+                }
+
                 bot.message(
                     chat_system.events_channel(),
                     format!("Don't forget! {} is starting soon!", event.title()),
@@ -757,9 +768,18 @@ impl TelegramActor {
         let system_id = event.system_id();
 
         let fut = self.db
-            .send(LookupSystem { system_id })
+            .send(LookupSystemWithChats { system_id })
             .then(flatten)
-            .and_then(move |chat_system| {
+            .and_then(move |(chat_system, chats)| {
+                for chat in chats {
+                    bot.inner.handle.spawn(
+                        bot.message(chat, format!("{} has ended!", event.title()))
+                            .send()
+                            .map(|_| ())
+                            .map_err(|e| error!("Error: {:?}", e)),
+                    );
+                }
+
                 bot.message(
                     chat_system.events_channel(),
                     format!("{} has ended!", event.title()),
@@ -778,11 +798,20 @@ impl TelegramActor {
         let bot = self.bot.clone();
 
         let fut = self.db
-            .send(LookupSystem {
+            .send(LookupSystemWithChats {
                 system_id: event.system_id(),
             })
             .then(flatten)
-            .and_then(move |chat_system| {
+            .and_then(move |(chat_system, chats)| {
+                for chat in chats {
+                    bot.inner.handle.spawn(
+                        bot.message(chat, format!("{} has started!", event.title()))
+                            .send()
+                            .map(|_| ())
+                            .map_err(|e| error!("Error: {:?}", e)),
+                    );
+                }
+
                 bot.message(
                     chat_system.events_channel(),
                     format!("{} has started!", event.title()),

@@ -191,6 +191,14 @@ impl Message for LookupSystem {
     type Result = Result<ChatSystem, EventError>;
 }
 
+pub struct LookupSystemWithChats {
+    pub system_id: i32,
+}
+
+impl Message for LookupSystemWithChats {
+    type Result = Result<(ChatSystem, Vec<Integer>), EventError>;
+}
+
 /// This type requests the ChatSystem given the channel's Telegram ID
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct LookupSystemByChannel(pub Integer);

@@ -256,6 +256,14 @@ impl DbBroker {
         ChatSystem::by_id(system_id, connection)
     }
 
+    fn get_system_with_chats_by_id(
+        system_id: i32,
+        connection: Connection,
+    ) -> impl Future<Item = ((ChatSystem, Vec<Integer>), Connection), Error = (EventError, Connection)>
+    {
+        ChatSystem::by_id_with_chat_ids(system_id, connection)
+    }
+
     fn get_system_by_channel(
         channel_id: Integer,
         connection: Connection,

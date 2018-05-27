@@ -77,6 +77,7 @@ fn url() -> String {
 }
 
 fn main() {
+    env::set_var("RUST_LOG", "event_bot=debug");
     env_logger::init();
 
     debug!("Running!");

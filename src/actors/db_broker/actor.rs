@@ -22,6 +22,7 @@
 use actix::fut::wrap_future;
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, ResponseActFuture, Unsync};
 use futures::Future;
+use telebot::objects::Integer;
 use tokio_postgres::Connection;
 
 use super::messages::*;
@@ -271,6 +272,17 @@ impl Handler<LookupSystem> for DbBroker {
     fn handle(&mut self, msg: LookupSystem, ctx: &mut Self::Context) -> Self::Result {
         self.wrap_fut(
             move |connection| DbBroker::get_system_by_id(msg.system_id, connection),
+            ctx,
+        )
+    }
+}
+
+impl Handler<LookupSystemWithChats> for DbBroker {
+    type Result = FutureResponse<(ChatSystem, Vec<Integer>)>;
+
+    fn handle(&mut self, msg: LookupSystemWithChats, ctx: &mut Self::Context) -> Self::Result {
+        self.wrap_fut(
+            move |connection| DbBroker::get_system_with_chats_by_id(msg.system_id, connection),
             ctx,
         )
     }
